@@ -1,0 +1,21 @@
+[project]
+name = "interview-service"
+version = "0.1.0"
+description = "AI Interview System - Backend Service"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0.0",
+    "flask-cors>=4.0.0",
+    "pydantic>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "openai>=1.0.0",
+    "pyyaml>=6.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

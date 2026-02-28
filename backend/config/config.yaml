@@ -1,0 +1,49 @@
+# 应用配置
+app:
+  name: "interview-service"
+  version: "0.1.0"
+  debug: true
+  host: "0.0.0.0"
+  port: 8000
+
+# 数据库配置
+database:
+  host: "localhost"
+  port: 5432
+  name: "interview_db"
+  user: "postgres"
+  password: "postgres"
+  pool_size: 5
+  max_overflow: 10
+
+# AI服务配置 (可替换为任意兼容OpenAI API的服务)
+ai:
+  provider: "openai"  # openai, anthropic, 或其他兼容API
+  api_key: "${AI_API_KEY}"
+  base_url: "${AI_BASE_URL:https://api.openai.com/v1}"
+  model: "Qwen/Qwen2.5-7B-Instruct"  # SiliconFlow支持的模型
+  temperature: 0.3  # 降低温度，减少随机性，输出更确定
+  max_tokens: 1000  # 限制回复长度，加快响应速度
+  timeout: 30
+
+# CORS配置
+cors:
+  enabled: true
+  origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+  methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  credentials: true
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/app.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5

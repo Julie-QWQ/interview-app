@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_serena_serena__list_dir",
+      "mcp__plugin_serena_serena__read_file",
+      "mcp__plugin_serena_serena__activate_project",
+      "Bash(chmod +x scripts/*.sh)",
+      "Bash(cmd.exe /c \"scripts\\\\start-db.bat\")",
+      "Bash(docker-compose ps)",
+      "Bash(docker-compose up -d)",
+      "Bash(cmd.exe /c \"scripts\\\\test.bat\")",
+      "Bash(docker ps --filter \"name=interview-postgres\" --format \"table {{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
+      "Bash(docker exec interview-postgres psql -U postgres -d interview_db -c \"SELECT version\\(\\);\")",
+      "Bash(docker-compose down)",
+      "Bash(powershell.exe -Command \"cd ''C:\\\\Users\\\\22318\\\\Desktop\\\\fwwb-contest\\\\project\\\\offer-master-easy-version\\\\interview-service''; .\\\\scripts\\\\start-db.bat\")",
+      "Bash(cmd.exe /c \"echo test && docker ps\")",
+      "Bash(docker exec interview-postgres pg_isready -U postgres)",
+      "Bash(docker exec interview-postgres psql -U postgres -d interview_db -c \"SELECT ''Database OK'' as status;\")",
+      "Bash(python main.py)",
+      "Bash(python -m venv venv)",
+      "Bash(source venv/Scripts/activate)",
+      "Bash(pip install -e .)",
+      "Bash(pip install uv)",
+      "Bash(source .venv/Scripts/activate)",
+      "Bash(uv pip install -r requirements.txt)",
+      "Bash(python -c \"from app import create_app; from config.settings import settings; app = create_app\\(\\); print\\(''Backend can start successfully!''\\)\")",
+      "mcp__plugin_serena_serena__replace_content",
+      "mcp__plugin_serena_serena__find_file",
+      "Bash(git init)",
+      "Bash(git add -A)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
