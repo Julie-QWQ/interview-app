@@ -10,6 +10,7 @@ from app.models.schemas import (
     MessageResponse, ChatMessage, InterviewStatus, MessageType
 )
 from app.models.interview_stage import InterviewStage
+from app.models.prompt_config import InterviewPromptConfig, DEFAULT_PROMPT_CONFIG
 import logging
 
 logger = logging.getLogger(__name__)
@@ -380,6 +381,65 @@ def get_evaluation(interview_id: int):
 def health():
     """健康检查"""
     return jsonify({'status': 'healthy', 'service': 'interview-service-api'})
+
+
+# ==================== Prompt配置相关接口 ====================
+
+@api_bp.route('/prompts/config', methods=['GET'])
+def get_prompt_config():
+    """获取Prompt配置"""
+    try:
+        # 从数据库获取配置，如果没有则使用默认配置
+        config_data = database.get_prompt_config('default')
+        
+        if config_data:
+            config = InterviewPromptConfig(**config_data)
+        else:
+            # 首次使用，保存默认配置
+            config_dict = DEFAULT_PROMPT_CONFIG.model_dump()
+            database.save_prompt_config(config_dict, 'default')
+            config = DEFAULT_PROMPT_CONFIG
+        
+        return jsonify(config.model_dump()), 200
+        
+    except Exception as e:
+        logger.error(f"获取Prompt配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/prompts/config', methods=['POST'])
+def update_prompt_config():
+    """更新Prompt配置"""
+    try:
+        data = request.get_json()
+        
+        # 验证配置
+        config = InterviewPromptConfig(**data)
+        
+        # 保存到数据库
+        database.save_prompt_config(config.model_dump(), 'default')
+        
+        logger.info("Prompt配置已更新")
+        return jsonify({'message': '配置保存成功'}), 200
+        
+    except Exception as e:
+        logger.error(f"更新Prompt配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/prompts/reset', methods=['POST'])
+def reset_prompt_config():
+    """重置Prompt配置为默认值"""
+    try:
+        config_dict = DEFAULT_PROMPT_CONFIG.model_dump()
+        database.save_prompt_config(config_dict, 'default')
+        
+        logger.info("Prompt配置已重置")
+        return jsonify({'message': '配置已重置为默认值', 'config': config_dict}), 200
+        
+    except Exception as e:
+        logger.error(f"重置Prompt配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @api_bp.route('/interviews/<int:interview_id>/progress', methods=['GET'])

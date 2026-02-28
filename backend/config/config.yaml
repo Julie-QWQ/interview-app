@@ -22,8 +22,8 @@ ai:
   api_key: "${AI_API_KEY}"
   base_url: "${AI_BASE_URL:https://api.openai.com/v1}"
   model: "Qwen/Qwen2.5-7B-Instruct"  # SiliconFlow支持的模型
-  temperature: 0.3  # 降低温度，减少随机性，输出更确定
-  max_tokens: 1000  # 限制回复长度，加快响应速度
+  temperature: 0.8  # 温度反应随机性，越低输出更确定
+  max_tokens: 3000  # 限制回复长度，加快响应速度
   timeout: 30
 
 # CORS配置

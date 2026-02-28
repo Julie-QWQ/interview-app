@@ -89,11 +89,21 @@ def _create_tables():
     );
     """
 
+    create_prompt_configs_table = """
+    CREATE TABLE IF NOT EXISTS prompt_configs (
+        id SERIAL PRIMARY KEY,
+        config_type VARCHAR(50) UNIQUE NOT NULL,
+        config_data JSONB NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+
     # 创建索引
     create_indexes = [
         "CREATE INDEX IF NOT EXISTS idx_messages_interview_id ON messages(interview_id);",
         "CREATE INDEX IF NOT EXISTS idx_evaluations_interview_id ON evaluations(interview_id);",
         "CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status);",
+        "CREATE INDEX IF NOT EXISTS idx_interviews_current_stage ON interviews(current_stage);",
     ]
 
     try:
@@ -101,6 +111,7 @@ def _create_tables():
             cur.execute(create_interviews_table)
             cur.execute(create_messages_table)
             cur.execute(create_evaluations_table)
+            cur.execute(create_prompt_configs_table)
             for index_sql in create_indexes:
                 cur.execute(index_sql)
         logger.info("数据库表创建成功")
@@ -257,3 +268,34 @@ def get_evaluation(interview_id: int) -> Optional[dict]:
     with get_db_cursor() as cur:
         cur.execute(sql, (interview_id,))
         return cur.fetchone()
+
+
+# ==================== Prompt配置相关操作 ====================
+
+def save_prompt_config(config_data: dict, config_type: str = 'default') -> int:
+    """保存Prompt配置"""
+    sql = """
+    INSERT INTO prompt_configs (config_type, config_data, updated_at)
+    VALUES (%s, %s, CURRENT_TIMESTAMP)
+    ON CONFLICT (config_type) DO UPDATE SET
+        config_data = EXCLUDED.config_data,
+        updated_at = CURRENT_TIMESTAMP
+    RETURNING id
+    """
+    with get_db_cursor() as cur:
+        import json
+        cur.execute(sql, (config_type, json.dumps(config_data, ensure_ascii=False)))
+        result = cur.fetchone()
+        return result['id']
+
+
+def get_prompt_config(config_type: str = 'default') -> Optional[dict]:
+    """获取Prompt配置"""
+    sql = "SELECT config_data FROM prompt_configs WHERE config_type = %s"
+    with get_db_cursor() as cur:
+        cur.execute(sql, (config_type,))
+        result = cur.fetchone()
+        if result:
+            import json
+            return json.loads(result['config_data'])
+        return None
