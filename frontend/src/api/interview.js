@@ -46,6 +46,7 @@ export const interviewApi = {
     const baseURL = isDev ? 'http://localhost:8000/api' : '/api'
     const url = `${baseURL}/interviews/${id}/chat/stream`
 
+    // 不返回 Promise，让回调处理所有事情
     fetch(url, {
       method: 'POST',
       headers: {
@@ -54,7 +55,8 @@ export const interviewApi = {
       body: JSON.stringify({ content })
     }).then(async response => {
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        onError && onError(`HTTP ${response.status}: ${response.statusText}`)
+        return
       }
 
       const reader = response.body.getReader()

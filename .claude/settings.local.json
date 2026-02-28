@@ -36,7 +36,8 @@
       "Bash(docker exec:*)",
       "Bash(docker ps --filter \"ancestor=postgres\" --format \"{{.Names}}\")",
       "Bash(docker ps -a --format \"table {{.Names}}\\\\t{{.Image}}\")",
-      "mcp__plugin_serena_serena__search_for_pattern"
+      "mcp__plugin_serena_serena__search_for_pattern",
+      "Bash(git add frontend/src/api/interview.js)"
     ]
   }
 }

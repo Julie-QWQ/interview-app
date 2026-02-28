@@ -358,16 +358,16 @@ async function handleSend() {
     return
   }
 
+  if (interviewStore.thinking) {
+    return
+  }
+
   try {
-    loading.value = true
-    await interviewStore.sendMessage(interviewId.value, content)
     inputMessage.value = ''
-    await nextTick()
-    scrollToBottom()
+    await interviewStore.sendMessage(interviewId.value, content)
   } catch (error) {
     console.error('发送消息失败', error)
-  } finally {
-    loading.value = false
+    ElMessage.error('发送失败，请重试')
   }
 }
 
