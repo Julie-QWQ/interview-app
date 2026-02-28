@@ -278,6 +278,86 @@ def chat(interview_id: int):
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/interviews/<int:interview_id>/chat/stream', methods=['POST'])
+def chat_stream(interview_id: int):
+    """发送消息并获取AI流式回复"""
+    from flask import Response, stream_with_context
+    
+    try:
+        data = request.get_json()
+        user_message = data.get('content')
+
+        if not user_message:
+            return jsonify({'error': '消息内容不能为空'}), 400
+
+        interview = database.get_interview(interview_id)
+        if not interview:
+            return jsonify({'error': '面试不存在'}), 404
+
+        if interview['status'] != InterviewStatus.IN_PROGRESS:
+            return jsonify({'error': '面试未进行中'}), 400
+
+        # 保存用户消息
+        database.create_message(interview_id, MessageType.USER, user_message)
+
+        # 获取对话历史
+        messages = database.get_messages(interview_id)
+
+        # 获取AI服务
+        ai_service = get_ai_service()
+        
+        # 确定应该处于的阶段
+        new_stage = ai_service.determine_current_stage(messages, interview.get('duration_minutes', 30))
+        current_stage = interview.get('current_stage', InterviewStage.WELCOME.value)
+        
+        # 如果阶段发生变化，更新数据库
+        if new_stage.value != current_stage:
+            database.update_interview_stage(interview_id, new_stage.value)
+            logger.info(f"面试 {interview_id} 阶段切换: {current_stage} -> {new_stage.value}")
+
+        def generate():
+            """生成流式响应"""
+            full_response = ""
+            
+            try:
+                # 流式生成AI回复
+                for chunk in ai_service.continue_interview_stream(interview, messages, current_stage=new_stage.value):
+                    full_response += chunk
+                    # 发送 SSE 格式数据
+                    yield f"data: {json.dumps({'content': chunk, 'done': False}, ensure_ascii=False)}\n\n"
+                
+                # 保存完整的AI回复
+                database.create_message(interview_id, MessageType.ASSISTANT, full_response)
+                
+                # 获取进度信息
+                progress_info = ai_service.get_interview_progress(
+                    messages, 
+                    new_stage.value, 
+                    interview.get('duration_minutes', 30)
+                )
+                
+                # 发送完成消息，包含完整信息
+                yield f"data: {json.dumps({'done': True, 'current_stage': new_stage.value, 'progress': progress_info}, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                logger.error(f"流式对话失败: {e}")
+                yield f"data: {json.dumps({'error': str(e), 'done': True}, ensure_ascii=False)}\n\n"
+
+        logger.info(f"面试 {interview_id} 开始流式对话")
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"对话失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/interviews/<int:interview_id>/evaluation', methods=['GET'])
 def get_evaluation(interview_id: int):
     """获取面试评估"""

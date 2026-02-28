@@ -44,6 +44,34 @@ class AIService:
             logger.error(f"AI请求失败: {e}")
             raise
 
+    def chat_completion_stream(self, messages: List[Dict[str, str]], **kwargs):
+        """
+        发起流式聊天完成请求
+
+        Args:
+            messages: 消息列表
+            **kwargs: 额外参数
+
+        Yields:
+            str: 每次生成的文本片段
+        """
+        try:
+            stream = self.client.chat.completions.create(
+                model=kwargs.get('model', self.settings.ai_model),
+                messages=messages,
+                temperature=kwargs.get('temperature', self.settings.ai_temperature),
+                max_tokens=kwargs.get('max_tokens', 2000),
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
+        except Exception as e:
+            logger.error(f"AI流式请求失败: {e}")
+            raise
+
     def start_interview(self, interview_config: dict) -> str:
         """开始面试，获取开场问题"""
         # 获取基础系统提示
@@ -104,6 +132,49 @@ class AIService:
             })
 
         return self.chat_completion(messages)
+
+    def continue_interview_stream(self, interview_config: dict, conversation_history: List[dict],
+                                  current_stage: str = None):
+        """继续面试对话（流式输出，带阶段感知）"""
+        # 获取基础系统提示
+        system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
+        
+        # 确定当前阶段
+        progress_manager = InterviewProgress(interview_config.get('duration_minutes', 30))
+        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
+        
+        if current_stage:
+            stage = InterviewStage(current_stage)
+        else:
+            stage = progress_manager.determine_stage(current_turn)
+        
+        # 添加当前阶段的系统指令
+        stage_config = STAGE_CONFIGS[stage]
+        system_prompt += f"\n\n{stage_config.system_instruction}"
+        
+        # 添加进度信息
+        progress_info = progress_manager.calculate_progress(current_turn, stage)
+        system_prompt += f"""
+
+【面试进度信息】
+- 当前阶段：{progress_info['stage_name']}（第 {current_turn} 轮对话）
+- 本阶段进度：{progress_info['turn_in_stage']}/{progress_info['stage_max_turns']} 问题
+- 总体进度：{progress_info['overall_progress']}%
+- 剩余轮次：约 {progress_info['remaining_turns']} 轮
+
+请根据进度合理控制节奏和内容深度。"""
+
+        # 构建消息列表
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # 添加历史对话
+        for msg in conversation_history[-20:]:
+            messages.append({
+                "role": msg['role'],
+                "content": msg['content']
+            })
+
+        yield from self.chat_completion_stream(messages)
 
     def determine_current_stage(self, conversation_history: List[dict], 
                                 duration_minutes: int = 30) -> InterviewStage:

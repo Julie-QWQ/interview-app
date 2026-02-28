@@ -65,8 +65,16 @@
               :key="index"
               :class="['message-wrapper', message.role]"
             >
-              <div class="message-bubble" :class="message.role">
-                <div class="message-content">{{ message.content }}</div>
+              <div class="message-bubble" :class="[message.role, { 'streaming': message.isStreaming }]">
+                <div class="message-content">
+                  <template v-if="message.isStreaming && !message.content">
+                    <span class="thinking-dots">AI 正在思考</span>
+                  </template>
+                  <template v-else>
+                    {{ message.content }}
+                    <span v-if="message.isStreaming" class="cursor">|</span>
+                  </template>
+                </div>
                 <div class="message-time">{{ formatTime(message.timestamp) }}</div>
               </div>
             </div>
@@ -80,13 +88,25 @@
               type="textarea"
               :rows="3"
               placeholder="请输入您的回答..."
-              :disabled="loading"
+              :disabled="interviewStore.thinking"
               @keydown.enter.ctrl="handleSend"
             />
             <div class="input-actions">
-              <span class="hint">Ctrl + Enter 发送</span>
-              <el-button type="primary" @click="handleSend" :loading="loading">
-                发送
+              <span class="hint">
+                <template v-if="interviewStore.thinking">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  AI 正在思考...
+                </template>
+                <template v-else>
+                  Ctrl + Enter 发送
+                </template>
+              </span>
+              <el-button 
+                type="primary" 
+                @click="handleSend" 
+                :disabled="interviewStore.thinking || !inputMessage.trim()"
+              >
+                {{ interviewStore.thinking ? '思考中...' : '发送' }}
               </el-button>
             </div>
           </div>
@@ -233,10 +253,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
+import { ref, onMounted, nextTick, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Check } from '@element-plus/icons-vue'
+import { VideoPlay, Check, Loading } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
 import { interviewApi } from '@/api/interview'
 
@@ -269,6 +289,13 @@ onMounted(async () => {
   await loadEvaluation()
   scrollToBottom()
 })
+
+// 监听消息变化，自动滚动到底部（支持流式输出）
+watch(messages, () => {
+  nextTick(() => {
+    scrollToBottom()
+  })
+}, { deep: true })
 
 async function loadStagesConfig() {
   try {
@@ -589,11 +616,27 @@ function formatDate(dateStr) {
     background: #f5f7fa;
     color: #333;
     border-bottom-left-radius: 4px;
+    
+    &.streaming {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 1px solid #bae6fd;
+    }
   }
 
   .message-content {
     white-space: pre-wrap;
     line-height: 1.6;
+    
+    .cursor {
+      animation: blink 1s infinite;
+      color: #0ea5e9;
+      font-weight: bold;
+    }
+  }
+  
+  .thinking-dots {
+    color: #94a3b8;
+    font-style: italic;
   }
 
   .message-time {
@@ -782,6 +825,15 @@ function formatDate(dateStr) {
       line-height: 1.8;
       color: #666;
     }
+  }
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
   }
 }
 

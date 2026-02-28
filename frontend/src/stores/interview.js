@@ -9,6 +9,8 @@ export const useInterviewStore = defineStore('interview', () => {
   const loading = ref(false)
   const currentStage = ref(null)
   const stageProgress = ref(null)
+  const thinking = ref(false) // AI 思考状态
+  const streamingMessage = ref('') // 正在流式输出的消息
 
   // 获取面试列表
   async function fetchInterviews(params = {}) {
@@ -69,35 +71,61 @@ export const useInterviewStore = defineStore('interview', () => {
     }
   }
 
-  // 发送消息
+  // 发送消息（流式）
   async function sendMessage(id, content) {
-    loading.value = true
-    try {
-      // 先添加用户消息
-      messages.value.push({
-        role: 'user',
-        content,
-        timestamp: new Date().toISOString()
-      })
+    // 先添加用户消息
+    messages.value.push({
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString()
+    })
 
-      const data = await interviewApi.chat(id, content)
-      // 添加AI回复
-      messages.value.push({
-        role: 'assistant',
-        content: data.content,
-        timestamp: new Date().toISOString()
-      })
-      // 更新阶段和进度
-      if (data.current_stage) {
-        currentStage.value = data.current_stage
-      }
-      if (data.progress) {
-        stageProgress.value = data.progress
-      }
-      return data
-    } finally {
-      loading.value = false
+    // 添加一个临时的AI消息占位符
+    const tempMessage = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      isStreaming: true
     }
+    messages.value.push(tempMessage)
+    
+    thinking.value = true
+    streamingMessage.value = ''
+
+    return new Promise((resolve, reject) => {
+      interviewApi.chatStream(
+        id,
+        content,
+        // onChunk
+        (chunk) => {
+          streamingMessage.value += chunk
+          tempMessage.content = streamingMessage.value
+        },
+        // onError
+        (error) => {
+          thinking.value = false
+          tempMessage.isStreaming = false
+          tempMessage.error = true
+          reject(error)
+        },
+        // onComplete
+        (finalData) => {
+          thinking.value = false
+          tempMessage.isStreaming = false
+          tempMessage.timestamp = new Date().toISOString()
+          
+          // 更新阶段和进度
+          if (finalData.current_stage) {
+            currentStage.value = finalData.current_stage
+          }
+          if (finalData.progress) {
+            stageProgress.value = finalData.progress
+          }
+          
+          resolve(finalData)
+        }
+      )
+    })
   }
 
   // 完成面试
@@ -129,6 +157,8 @@ export const useInterviewStore = defineStore('interview', () => {
     messages.value = []
     currentStage.value = null
     stageProgress.value = null
+    thinking.value = false
+    streamingMessage.value = ''
   }
 
   return {
@@ -138,6 +168,8 @@ export const useInterviewStore = defineStore('interview', () => {
     loading,
     currentStage,
     stageProgress,
+    thinking,
+    streamingMessage,
     fetchInterviews,
     createInterview,
     fetchInterviewDetail,
