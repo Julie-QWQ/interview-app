@@ -53,28 +53,40 @@ export const interviewApi = {
 
   // 流式发送消息
   chatStream(id, content, onChunk, onError, onComplete) {
-    const token = localStorage.getItem('token')
+    // 开发环境直接访问后端，避免代理问题
+    const isDev = import.meta.env.DEV
+    const baseURL = isDev ? 'http://localhost:8000/api' : '/api'
+    const url = `${baseURL}/interviews/${id}/chat/stream`
     
-    return fetch(`${api.defaults.baseURL}/interviews/${id}/chat/stream`, {
+    fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` })
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ content })
-    }).then(response => {
+    }).then(async response => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-      
-      const read = () => {
-        reader.read().then(({ done, value }) => {
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          
           if (done) {
             onComplete && onComplete()
-            return
+            break
           }
           
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          
+          // 保留最后一个不完整的行
+          buffer = lines.pop() || ''
           
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -95,18 +107,15 @@ export const interviewApi = {
                   onChunk && onChunk(data.content)
                 }
               } catch (e) {
-                console.error('解析SSE数据失败', e)
+                console.error('解析SSE数据失败', e, line)
               }
             }
           }
-          
-          read()
-        })
+        }
+      } catch (error) {
+        onError && onError(error.message)
       }
-      
-      read()
     }).catch(error => {
       onError && onError(error.message)
     })
   }
-}

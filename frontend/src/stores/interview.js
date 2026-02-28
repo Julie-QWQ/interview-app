@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { interviewApi } from '@/api/interview'
 
 export const useInterviewStore = defineStore('interview', () => {
