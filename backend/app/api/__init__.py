@@ -290,56 +290,6 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'interview-service-api'})
 
 
-@api_bp.route('/admin/migrate', methods=['POST'])
-def run_migration():
-    """执行数据库迁移（仅开发环境）"""
-    try:
-        from app.db import get_db_cursor
-
-        with get_db_cursor() as cur:
-            # 检查字段是否已存在
-            cur.execute("""
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name='interviews' AND column_name='current_stage'
-            """)
-
-            if cur.fetchone():
-                return jsonify({
-                    'message': 'current_stage 字段已存在',
-                    'already_migrated': True
-                }), 200
-
-            # 添加字段
-            cur.execute("""
-                ALTER TABLE interviews
-                ADD COLUMN current_stage VARCHAR(50) DEFAULT 'welcome'
-            """)
-
-            # 为现有记录设置默认值
-            cur.execute("""
-                UPDATE interviews
-                SET current_stage = 'welcome'
-                WHERE current_stage IS NULL
-            """)
-
-            # 创建索引
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_interviews_current_stage
-                ON interviews(current_stage)
-            """)
-
-        logger.info("数据库迁移成功：添加 current_stage 字段")
-        return jsonify({
-            'message': '迁移执行成功',
-            'already_migrated': False
-        }), 200
-
-    except Exception as e:
-        logger.error(f"迁移失败: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @api_bp.route('/interviews/<int:interview_id>/progress', methods=['GET'])
 def get_interview_progress(interview_id: int):
     """获取面试进度"""

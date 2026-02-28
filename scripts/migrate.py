@@ -9,7 +9,8 @@ import os
 os.environ.setdefault('FLASK_ENV', 'development')
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'backend')
+sys.path.insert(0, backend_dir)
 
 from app.db import get_db_cursor
 import logging

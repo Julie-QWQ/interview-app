@@ -3,7 +3,8 @@ REM 数据库迁移脚本
 
 echo [INFO] 正在执行数据库迁移...
 
-python -m backend.migrations %*
+cd /d "%~dp0.."
+python scripts/migrate.py
 
 if %errorlevel% equ 0 (
     echo [SUCCESS] 迁移完成！

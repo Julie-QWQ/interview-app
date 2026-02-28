@@ -3,7 +3,8 @@
 
 echo "[INFO] 正在执行数据库迁移..."
 
-python -m backend.migrations "$@"
+cd "$(dirname "$0")/.."
+python scripts/migrate.py "$@"
 
 if [ $? -eq 0 ]; then
     echo "[SUCCESS] 迁移完成！"

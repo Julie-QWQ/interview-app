@@ -32,7 +32,11 @@
       "Bash(git checkout -b feature/structured-interview-stages)",
       "Bash(python -c \":*)",
       "Bash(python migrations/migrate_add_current_stage.py)",
-      "Bash(psql -h localhost -U postgres -d interview_db -f migrations/add_current_stage.sql)"
+      "Bash(psql -h localhost -U postgres -d interview_db -f migrations/add_current_stage.sql)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps --filter \"ancestor=postgres\" --format \"{{.Names}}\")",
+      "Bash(docker ps -a --format \"table {{.Names}}\\\\t{{.Image}}\")",
+      "mcp__plugin_serena_serena__search_for_pattern"
     ]
   }
 }
