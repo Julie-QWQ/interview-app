@@ -96,9 +96,12 @@ def get_interview(interview_id: int):
             except:
                 pass  # 如果获取进度失败，忽略
 
+        # 从 interview 中移除 current_stage，避免重复传递
+        interview_without_stage = {k: v for k, v in interview.items() if k != 'current_stage'}
+
         # 构建详情响应
         interview_detail = InterviewDetailResponse(
-            **interview,
+            **interview_without_stage,
             messages=[MessageResponse(**m).model_dump() for m in messages],
             current_stage=current_stage,
             stage_progress=stage_progress
@@ -135,12 +138,20 @@ def start_interview(interview_id: int):
         if not interview:
             return jsonify({'error': '面试不存在'}), 404
 
-        if interview['status'] != InterviewStatus.CREATED:
-            return jsonify({'error': '面试状态不正确'}), 400
+        # 允许 CREATED 或 IN_PROGRESS 状态（支持重试）
+        if interview['status'] not in [InterviewStatus.CREATED, InterviewStatus.IN_PROGRESS]:
+            return jsonify({'error': '面试状态不正确，只能开始已创建或进行中的面试'}), 400
 
-        # 更新状态为进行中，并设置初始阶段
-        database.update_interview_status(interview_id, InterviewStatus.IN_PROGRESS)
-        database.update_interview_stage(interview_id, InterviewStage.WELCOME.value)
+        # 检查是否已有消息（如果有，说明已经开始了）
+        messages = database.get_messages(interview_id)
+        is_retry = len(messages) > 0 and interview['status'] == InterviewStatus.IN_PROGRESS
+        
+        if is_retry:
+            logger.info(f"面试 {interview_id} 重新开始")
+        else:
+            # 更新状态为进行中，并设置初始阶段
+            database.update_interview_status(interview_id, InterviewStatus.IN_PROGRESS)
+            database.update_interview_stage(interview_id, InterviewStage.WELCOME.value)
 
         # 获取AI服务
         ai_service = get_ai_service()
