@@ -316,3 +316,32 @@ def get_interview_progress(interview_id: int):
     except Exception as e:
         logger.error(f"获取进度失败: {e}")
         return jsonify({'error': str(e)}), 400
+
+
+@api_bp.route('/stages/config', methods=['GET'])
+def get_stages_config():
+    """获取所有阶段配置"""
+    try:
+        from app.models.interview_stage import STAGE_CONFIGS, InterviewStage
+        
+        stages_config = []
+        for stage_enum, config in STAGE_CONFIGS.items():
+            stages_config.append({
+                'stage': stage_enum.value,
+                'name': config.name,
+                'description': config.description,
+                'max_turns': config.max_turns,
+                'min_turns': config.min_turns,
+                'time_allocation': config.time_allocation,
+                'system_instruction': config.system_instruction
+            })
+        
+        return jsonify({
+            'stages': stages_config,
+            'total_duration': sum(c.time_allocation for c in STAGE_CONFIGS.values()),
+            'total_max_turns': sum(c.max_turns for c in STAGE_CONFIGS.values())
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"获取阶段配置失败: {e}")
+        return jsonify({'error': str(e)}), 400

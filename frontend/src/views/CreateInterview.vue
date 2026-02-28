@@ -6,7 +6,9 @@
       </template>
     </el-page-header>
 
-    <el-card class="form-card" shadow="never">
+    <el-row :gutter="20">
+      <el-col :xs="24" :lg="16">
+        <el-card class="form-card" shadow="never">
       <el-form
         ref="formRef"
         :model="formData"
@@ -104,21 +106,104 @@
         </el-form-item>
       </el-form>
     </el-card>
+      </el-col>
+
+      <el-col :xs="24" :lg="8">
+        <el-card class="stages-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span>面试阶段计划</span>
+              <el-tag type="info">{{ totalDuration }}分钟</el-tag>
+            </div>
+          </template>
+
+          <el-timeline>
+            <el-timeline-item
+              v-for="(stage, index) in stagesConfig"
+              :key="stage.stage"
+              :timestamp="`${stage.time_allocation}分钟`"
+              placement="top"
+              :type="getStageType(stage.stage)"
+            >
+              <div class="stage-item">
+                <div class="stage-header">
+                  <span class="stage-name">{{ stage.name }}</span>
+                  <el-tag size="small" type="info">{{ stage.min_turns }}-{{ stage.max_turns }} 轮</el-tag>
+                </div>
+                <div class="stage-desc">{{ stage.description }}</div>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+
+          <el-divider />
+
+          <div class="stages-summary">
+            <div class="summary-item">
+              <span class="label">总时长：</span>
+              <span class="value">{{ totalDuration }} 分钟</span>
+            </div>
+            <div class="summary-item">
+              <span class="label">总轮次：</span>
+              <span class="value">约 {{ totalMaxTurns }} 轮对话</span>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
+import { interviewApi } from '@/api/interview'
 
 const router = useRouter()
 const interviewStore = useInterviewStore()
 
 const formRef = ref(null)
 const loading = ref(false)
+const stagesConfig = ref([])
+const stagesLoading = ref(false)
+
+// 计算总时长和总轮次
+const totalDuration = computed(() => {
+  return stagesConfig.value.reduce((sum, stage) => sum + stage.time_allocation, 0)
+})
+
+const totalMaxTurns = computed(() => {
+  return stagesConfig.value.reduce((sum, stage) => sum + stage.max_turns, 0)
+})
+
+// 加载阶段配置
+onMounted(async () => {
+  await loadStagesConfig()
+})
+
+async function loadStagesConfig() {
+  stagesLoading.value = true
+  try {
+    const data = await interviewApi.getStagesConfig()
+    stagesConfig.value = data.stages
+  } catch (error) {
+    console.error('加载阶段配置失败', error)
+  } finally {
+    stagesLoading.value = false
+  }
+}
+
+function getStageType(stage) {
+  const typeMap = {
+    welcome: 'primary',
+    technical: 'success',
+    scenario: 'warning',
+    closing: 'info'
+  }
+  return typeMap[stage] || 'primary'
+}
 
 const formData = reactive({
   candidate_name: '',
@@ -170,7 +255,7 @@ const handleReset = () => {
 
 <style scoped lang="scss">
 .create-interview {
-  max-width: 800px;
+  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -183,6 +268,58 @@ h2 {
   margin-top: 24px;
 }
 
+.stages-card {
+  margin-top: 24px;
+  position: sticky;
+  top: 24px;
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+  }
+
+  .stage-item {
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+
+      .stage-name {
+        font-weight: 600;
+        font-size: 15px;
+        color: #333;
+      }
+    }
+
+    .stage-desc {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.6;
+    }
+  }
+
+  .stages-summary {
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 14px;
+
+      .label {
+        color: #666;
+      }
+
+      .value {
+        font-weight: 600;
+        color: #333;
+      }
+    }
+  }
+}
+
 .duration-display {
   text-align: center;
   color: #667eea;
@@ -192,5 +329,11 @@ h2 {
 
 :deep(.el-form-item__label) {
   font-weight: 600;
+}
+
+@media (max-width: 992px) {
+  .stages-card {
+    position: static;
+  }
 }
 </style>

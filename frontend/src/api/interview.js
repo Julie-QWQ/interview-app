@@ -39,5 +39,15 @@ export const interviewApi = {
   // 获取评估
   getEvaluation(id) {
     return api.get(`/interviews/${id}/evaluation`)
+  },
+
+  // 获取阶段配置
+  getStagesConfig() {
+    return api.get('/stages/config')
+  },
+
+  // 获取面试进度
+  getProgress(id) {
+    return api.get(`/interviews/${id}/progress`)
   }
 }

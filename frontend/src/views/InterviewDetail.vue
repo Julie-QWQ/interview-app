@@ -139,6 +139,46 @@
           </div>
         </el-card>
 
+        <!-- 阶段计划卡片 -->
+        <el-card class="stages-plan-card" shadow="never">
+          <template #header>
+            <div class="card-header">
+              <span>面试阶段计划</span>
+              <el-tag size="small" type="info">{{ totalDuration }}分钟</el-tag>
+            </div>
+          </template>
+
+          <el-steps direction="vertical" :space="80" :active="getStageStepIndex(currentStage)">
+            <el-step
+              v-for="(stage, index) in stagesConfig"
+              :key="stage.stage"
+              :status="getStageStepStatus(stage.stage)"
+            >
+              <template #title>
+                <div class="stage-step-title">
+                  <span class="stage-name">{{ stage.name }}</span>
+                  <el-tag 
+                    size="small" 
+                    :type="getStageStepType(stage.stage)"
+                    v-if="stage.stage === currentStage"
+                  >
+                    当前
+                  </el-tag>
+                </div>
+              </template>
+              <template #description>
+                <div class="stage-step-desc">
+                  <div class="stage-meta">
+                    <span>{{ stage.time_allocation }}分钟</span>
+                    <span>{{ stage.min_turns }}-{{ stage.max_turns }} 轮</span>
+                  </div>
+                  <p class="stage-description">{{ stage.description }}</p>
+                </div>
+              </template>
+            </el-step>
+          </el-steps>
+        </el-card>
+
         <el-card class="evaluation-card" shadow="never" v-if="evaluation">
           <template #header>
             <span>评估结果</span>
@@ -210,6 +250,7 @@ const messages = ref([])
 const evaluation = ref(null)
 const inputMessage = ref('')
 const messagesContainer = ref(null)
+const stagesConfig = ref([])
 
 const interviewId = computed(() => parseInt(route.params.id))
 
@@ -217,11 +258,26 @@ const interviewId = computed(() => parseInt(route.params.id))
 const currentStage = computed(() => interviewStore.currentStage)
 const stageProgress = computed(() => interviewStore.stageProgress)
 
+// 计算总时长
+const totalDuration = computed(() => {
+  return stagesConfig.value.reduce((sum, stage) => sum + stage.time_allocation, 0)
+})
+
 onMounted(async () => {
+  await loadStagesConfig()
   await loadInterviewDetail()
   await loadEvaluation()
   scrollToBottom()
 })
+
+async function loadStagesConfig() {
+  try {
+    const data = await interviewApi.getStagesConfig()
+    stagesConfig.value = data.stages
+  } catch (error) {
+    console.error('加载阶段配置失败', error)
+  }
+}
 
 async function loadInterviewDetail() {
   loading.value = true
@@ -346,6 +402,35 @@ function getStageText(stage) {
     closing: '📝 结束阶段'
   }
   return textMap[stage] || stage
+}
+
+function getStageStepIndex(currentStageValue) {
+  const stageOrder = ['welcome', 'technical', 'scenario', 'closing']
+  return stageOrder.indexOf(currentStageValue)
+}
+
+function getStageStepStatus(stageValue) {
+  const current = currentStage.value
+  const stageOrder = ['welcome', 'technical', 'scenario', 'closing']
+  
+  if (!current) return 'wait'
+  
+  const currentIndex = stageOrder.indexOf(current)
+  const stageIndex = stageOrder.indexOf(stageValue)
+  
+  if (stageIndex < currentIndex) return 'finish'
+  if (stageIndex === currentIndex) return 'process'
+  return 'wait'
+}
+
+function getStageStepType(stageValue) {
+  const typeMap = {
+    welcome: 'primary',
+    technical: 'success',
+    scenario: 'warning',
+    closing: 'info'
+  }
+  return typeMap[stageValue] || 'info'
 }
 
 function getSkillDomainText(domain) {
@@ -536,8 +621,58 @@ function formatDate(dateStr) {
   }
 }
 
-.info-card, .evaluation-card {
+.info-card, .evaluation-card, .stages-plan-card {
   margin-bottom: 20px;
+}
+
+.stages-plan-card {
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+  }
+
+  .stage-step-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .stage-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+  }
+
+  .stage-step-desc {
+    .stage-meta {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .stage-description {
+      margin: 0;
+      font-size: 13px;
+      color: #999;
+      line-height: 1.6;
+    }
+  }
+
+  :deep(.el-step__head.is-process) {
+    color: #667eea;
+    border-color: #667eea;
+  }
+
+  :deep(.el-step__title.is-process) {
+    color: #667eea;
+  }
+
+  :deep(.el-step__description.is-process) {
+    color: #667eea;
+  }
 }
 
 .info-list {
