@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from enum import Enum
+from datetime import datetime
 
 
 class MessageType(str, Enum):
@@ -83,6 +84,21 @@ class InterviewResponse(BaseModel):
 class InterviewDetailResponse(InterviewResponse):
     """面试详情响应（包含消息）"""
     messages: List[MessageResponse]
+    current_stage: Optional[str] = None
+    stage_progress: Optional[dict] = None
+
+
+class InterviewProgressResponse(BaseModel):
+    """面试进度响应"""
+    current_stage: str
+    stage_name: str
+    stage_description: str
+    turn_in_stage: int
+    stage_max_turns: int
+    stage_progress: int
+    overall_turn: int
+    overall_progress: int
+    remaining_turns: int
 
 
 class EvaluationResponse(BaseModel):

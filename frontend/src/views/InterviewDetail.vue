@@ -32,11 +32,32 @@
           <template #header>
             <div class="card-header">
               <span>面试对话</span>
-              <el-tag :type="getStatusType(currentInterview?.status)">
-                {{ getStatusText(currentInterview?.status) }}
-              </el-tag>
+              <div class="header-tags">
+                <el-tag :type="getStatusType(currentInterview?.status)">
+                  {{ getStatusText(currentInterview?.status) }}
+                </el-tag>
+                <el-tag v-if="currentStage" type="info" class="stage-tag">
+                  {{ getStageText(currentStage) }}
+                </el-tag>
+              </div>
             </div>
           </template>
+
+          <!-- 阶段进度条 -->
+          <div v-if="stageProgress" class="stage-progress-bar">
+            <div class="stage-info">
+              <span class="stage-label">{{ stageProgress.stage_name }}</span>
+              <span class="stage-meta">{{ stageProgress.turn_in_stage }}/{{ stageProgress.stage_max_turns }} 问题</span>
+            </div>
+            <el-progress 
+              :percentage="stageProgress.overall_progress" 
+              :stroke-width="8"
+              :show-text="true"
+            />
+            <div class="progress-text">
+              总进度: {{ stageProgress.overall_progress }}% | 剩余约 {{ stageProgress.remaining_turns }} 轮
+            </div>
+          </div>
 
           <div class="messages-container" ref="messagesContainer">
             <div
@@ -192,6 +213,10 @@ const messagesContainer = ref(null)
 
 const interviewId = computed(() => parseInt(route.params.id))
 
+// 从 store 获取阶段和进度信息
+const currentStage = computed(() => interviewStore.currentStage)
+const stageProgress = computed(() => interviewStore.stageProgress)
+
 onMounted(async () => {
   await loadInterviewDetail()
   await loadEvaluation()
@@ -313,6 +338,16 @@ function getStatusText(status) {
   return textMap[status] || status
 }
 
+function getStageText(stage) {
+  const textMap = {
+    welcome: '🎯 开场介绍',
+    technical: '💻 技术问题',
+    scenario: '🎨 情景问题',
+    closing: '📝 结束阶段'
+  }
+  return textMap[stage] || stage
+}
+
 function getSkillDomainText(domain) {
   const textMap = {
     frontend: '前端开发',
@@ -389,6 +424,47 @@ function formatDate(dateStr) {
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    .header-tags {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+
+      .stage-tag {
+        font-size: 13px;
+      }
+    }
+  }
+
+  .stage-progress-bar {
+    padding: 16px 0;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 16px;
+
+    .stage-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+
+      .stage-label {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      .stage-meta {
+        font-size: 13px;
+        color: #666;
+      }
+    }
+
+    .progress-text {
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+      margin-top: 8px;
+    }
   }
 
   .messages-container {

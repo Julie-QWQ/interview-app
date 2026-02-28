@@ -6,6 +6,7 @@ import json
 import logging
 from typing import List, Dict, Optional
 from .prompt_service import prompt_service
+from app.models.interview_stage import InterviewStage, InterviewProgress, STAGE_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,12 @@ class AIService:
 
     def start_interview(self, interview_config: dict) -> str:
         """开始面试，获取开场问题"""
+        # 获取基础系统提示
         system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
+        
+        # 添加开场阶段的系统指令
+        stage_config = STAGE_CONFIGS[InterviewStage.WELCOME]
+        system_prompt += f"\n\n{stage_config.system_instruction}"
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -54,9 +60,38 @@ class AIService:
 
         return self.chat_completion(messages)
 
-    def continue_interview(self, interview_config: dict, conversation_history: List[dict]) -> str:
-        """继续面试对话"""
+    def continue_interview(self, interview_config: dict, conversation_history: List[dict], 
+                          current_stage: str = None) -> str:
+        """继续面试对话（带阶段感知）"""
+        # 获取基础系统提示
         system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
+        
+        # 确定当前阶段
+        progress_manager = InterviewProgress(interview_config.get('duration_minutes', 30))
+        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
+        
+        if current_stage:
+            # 如果传入了当前阶段，使用它
+            stage = InterviewStage(current_stage)
+        else:
+            # 否则根据轮次自动判断
+            stage = progress_manager.determine_stage(current_turn)
+        
+        # 添加当前阶段的系统指令
+        stage_config = STAGE_CONFIGS[stage]
+        system_prompt += f"\n\n{stage_config.system_instruction}"
+        
+        # 添加进度信息
+        progress_info = progress_manager.calculate_progress(current_turn, stage)
+        system_prompt += f"""
+
+【面试进度信息】
+- 当前阶段：{progress_info['stage_name']}（第 {current_turn} 轮对话）
+- 本阶段进度：{progress_info['turn_in_stage']}/{progress_info['stage_max_turns']} 问题
+- 总体进度：{progress_info['overall_progress']}%
+- 剩余轮次：约 {progress_info['remaining_turns']} 轮
+
+请根据进度合理控制节奏和内容深度。"""
 
         # 构建消息列表
         messages = [{"role": "system", "content": system_prompt}]
@@ -69,6 +104,26 @@ class AIService:
             })
 
         return self.chat_completion(messages)
+
+    def determine_current_stage(self, conversation_history: List[dict], 
+                                duration_minutes: int = 30) -> InterviewStage:
+        """
+        根据对话历史确定当前应该处于的阶段
+        
+        Returns:
+            InterviewStage 枚举值
+        """
+        progress_manager = InterviewProgress(duration_minutes)
+        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
+        return progress_manager.determine_stage(current_turn)
+
+    def get_interview_progress(self, conversation_history: List[dict], 
+                              current_stage: str, duration_minutes: int = 30) -> dict:
+        """获取面试进度信息"""
+        progress_manager = InterviewProgress(duration_minutes)
+        stage = InterviewStage(current_stage)
+        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
+        return progress_manager.calculate_progress(current_turn, stage)
 
     def evaluate_interview(self, interview_config: dict, conversation_history: List[dict]) -> dict:
         """评估面试表现"""

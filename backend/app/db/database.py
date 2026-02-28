@@ -58,6 +58,7 @@ def _create_tables():
         duration_minutes INTEGER DEFAULT 30,
         additional_requirements TEXT,
         status VARCHAR(50) DEFAULT 'created',
+        current_stage VARCHAR(50) DEFAULT 'welcome',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP,
         completed_at TIMESTAMP
@@ -179,6 +180,14 @@ def delete_interview(interview_id: int) -> bool:
     sql = "DELETE FROM interviews WHERE id = %s"
     with get_db_cursor() as cur:
         cur.execute(sql, (interview_id,))
+        return cur.rowcount > 0
+
+
+def update_interview_stage(interview_id: int, current_stage: str) -> bool:
+    """更新面试当前阶段"""
+    sql = "UPDATE interviews SET current_stage = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s"
+    with get_db_cursor() as cur:
+        cur.execute(sql, (current_stage, interview_id))
         return cur.rowcount > 0
 
 

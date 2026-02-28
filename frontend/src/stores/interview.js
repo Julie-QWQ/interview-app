@@ -7,6 +7,8 @@ export const useInterviewStore = defineStore('interview', () => {
   const currentInterview = ref(null)
   const messages = ref([])
   const loading = ref(false)
+  const currentStage = ref(null)
+  const stageProgress = ref(null)
 
   // 获取面试列表
   async function fetchInterviews(params = {}) {
@@ -39,6 +41,8 @@ export const useInterviewStore = defineStore('interview', () => {
       const data = await interviewApi.getDetail(id)
       currentInterview.value = data
       messages.value = data.messages || []
+      currentStage.value = data.current_stage || null
+      stageProgress.value = data.stage_progress || null
       return data
     } finally {
       loading.value = false
@@ -83,6 +87,13 @@ export const useInterviewStore = defineStore('interview', () => {
         content: data.content,
         timestamp: new Date().toISOString()
       })
+      // 更新阶段和进度
+      if (data.current_stage) {
+        currentStage.value = data.current_stage
+      }
+      if (data.progress) {
+        stageProgress.value = data.progress
+      }
       return data
     } finally {
       loading.value = false
@@ -116,6 +127,8 @@ export const useInterviewStore = defineStore('interview', () => {
   function clearCurrentInterview() {
     currentInterview.value = null
     messages.value = []
+    currentStage.value = null
+    stageProgress.value = null
   }
 
   return {
@@ -123,6 +136,8 @@ export const useInterviewStore = defineStore('interview', () => {
     currentInterview,
     messages,
     loading,
+    currentStage,
+    stageProgress,
     fetchInterviews,
     createInterview,
     fetchInterviewDetail,
