@@ -1,7 +1,8 @@
 """
 API路由模块
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response, stream_with_context
+import json
 from app.services.ai_service import get_ai_service, init_ai_service
 from app.db import database
 from app.models.schemas import (
