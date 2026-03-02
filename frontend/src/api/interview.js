@@ -41,10 +41,59 @@ export const interviewApi = {
     return api.get(`/interviews/${id}/progress`)
   },
 
-  chatStream(id, content, onChunk, onError, onComplete) {
-    const isDev = import.meta.env.DEV
-    const baseURL = isDev ? 'http://localhost:8000/api' : '/api'
-    const url = `${baseURL}/interviews/${id}/chat/stream`
+  updateCurrentMessage(interviewId, messageId) {
+    return api.put(`/interviews/${interviewId}/current-message`, { message_id: messageId })
+  },
+
+  // Prompt配置相关API
+  getPromptConfig() {
+    return api.get('/prompts/config')
+  },
+
+  updatePromptConfig(config) {
+    return api.post('/prompts/config', config)
+  },
+
+  resetPromptConfig() {
+    return api.post('/prompts/reset')
+  },
+
+  // 快照相关API
+  createSnapshot(interviewId, data) {
+    return api.post(`/interviews/${interviewId}/snapshots`, data)
+  },
+
+  listSnapshots(interviewId) {
+    return api.get(`/interviews/${interviewId}/snapshots`)
+  },
+
+  getSnapshot(snapshotId) {
+    return api.get(`/snapshots/${snapshotId}`)
+  },
+
+  loadSnapshot(snapshotId) {
+    return api.post(`/snapshots/${snapshotId}/load`)
+  },
+
+  deleteSnapshot(snapshotId) {
+    return api.delete(`/snapshots/${snapshotId}`)
+  },
+
+  chatStream(id, content, onChunk, onError, onComplete, options = {}) {
+    // 使用相对路径,让 Vite 代理处理
+    const url = `/api/interviews/${id}/chat/stream`
+
+    // 支持传递 parent_id 和 branch_id
+    const requestBody = {
+      content,
+      enable_tts: true // 默认启用 TTS
+    }
+    if (options.parentId !== undefined) {
+      requestBody.parent_id = options.parentId
+    }
+    if (options.branchId !== undefined) {
+      requestBody.branch_id = options.branchId
+    }
 
     // 不返回 Promise，让回调处理所有事情
     fetch(url, {
@@ -52,7 +101,7 @@ export const interviewApi = {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ content })
+      body: JSON.stringify(requestBody)
     }).then(async response => {
       if (!response.ok) {
         onError && onError(`HTTP ${response.status}: ${response.statusText}`)
@@ -92,7 +141,9 @@ export const interviewApi = {
                 }
 
                 if (data.content) {
-                  onChunk && onChunk(data.content)
+                  // 传递内容,如果包含音频数据也一并传递
+                  const audio = data.audio || null
+                  onChunk && onChunk(data.content, audio)
                 }
               } catch (e) {
                 console.error('Failed to parse SSE', e, line)

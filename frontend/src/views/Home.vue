@@ -1,205 +1,406 @@
-<template>
-  <div class="home">
-    <div class="hero-section">
-      <h1 class="hero-title">欢迎使用AI面试系统</h1>
-      <p class="hero-subtitle">智能化技术面试，提升招聘效率</p>
+﻿<template>
+  <div class="dashboard-page">
+    <section class="dashboard-hero">
+      <div>
+        <h1>面试仪表盘</h1>
+        <p>集中查看面试总览、执行状态和最近动态</p>
+      </div>
       <div class="hero-actions">
-        <el-button type="primary" size="large" @click="$router.push('/interview/create')">
+        <el-button type="primary" @click="$router.push('/interview/create')">
           <el-icon><Plus /></el-icon>
-          创建面试
+          新建面试
         </el-button>
-        <el-button size="large" @click="$router.push('/interviews')">
+        <el-button @click="$router.push('/interviews')">
           <el-icon><List /></el-icon>
-          查看列表
+          全部面试
         </el-button>
       </div>
-    </div>
+    </section>
 
-    <div class="features">
-      <el-row :gutter="20">
-        <el-col :xs="24" :sm="8" v-for="feature in features" :key="feature.title">
-          <div class="feature-card">
-            <div class="feature-icon" :style="{ background: feature.color }">
-              <el-icon :size="32">
-                <component :is="feature.icon" />
-              </el-icon>
-            </div>
-            <h3>{{ feature.title }}</h3>
-            <p>{{ feature.description }}</p>
-          </div>
-        </el-col>
-      </el-row>
-    </div>
+    <section class="kpi-grid">
+      <article class="kpi-card">
+        <div class="kpi-head">
+          <span>总面试数</span>
+          <el-icon><ChatDotRound /></el-icon>
+        </div>
+        <div class="kpi-value">{{ stats.total }}</div>
+      </article>
 
-    <div class="stats-section">
-      <el-row :gutter="20">
-        <el-col :xs="12" :sm="6" v-for="stat in stats" :key="stat.label">
-          <div class="stat-card">
-            <div class="stat-value">{{ stat.value }}</div>
-            <div class="stat-label">{{ stat.label }}</div>
+      <article class="kpi-card">
+        <div class="kpi-head">
+          <span>待开始</span>
+          <el-icon><DocumentChecked /></el-icon>
+        </div>
+        <div class="kpi-value">{{ stats.created }}</div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-head">
+          <span>进行中</span>
+          <el-icon><VideoPlay /></el-icon>
+        </div>
+        <div class="kpi-value">{{ stats.inProgress }}</div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-head">
+          <span>完成率</span>
+          <el-icon><TrendCharts /></el-icon>
+        </div>
+        <div class="kpi-value">{{ completionRate }}%</div>
+      </article>
+    </section>
+
+    <section class="dashboard-main">
+      <el-card shadow="never" class="panel status-panel">
+        <template #header>
+          <div class="panel-header">
+            <span>状态分布</span>
           </div>
-        </el-col>
-      </el-row>
-    </div>
+        </template>
+
+        <div class="status-item">
+          <span>待开始</span>
+          <el-progress :percentage="statusPercent.created" :show-text="false" />
+          <strong>{{ stats.created }}</strong>
+        </div>
+
+        <div class="status-item">
+          <span>进行中</span>
+          <el-progress status="warning" :percentage="statusPercent.inProgress" :show-text="false" />
+          <strong>{{ stats.inProgress }}</strong>
+        </div>
+
+        <div class="status-item">
+          <span>已完成</span>
+          <el-progress status="success" :percentage="statusPercent.completed" :show-text="false" />
+          <strong>{{ stats.completed }}</strong>
+        </div>
+
+        <div class="status-item">
+          <span>已取消</span>
+          <el-progress status="exception" :percentage="statusPercent.cancelled" :show-text="false" />
+          <strong>{{ stats.cancelled }}</strong>
+        </div>
+      </el-card>
+
+      <el-card shadow="never" class="panel quick-panel">
+        <template #header>
+          <div class="panel-header">
+            <span>快捷入口</span>
+          </div>
+        </template>
+
+        <button class="quick-link" @click="$router.push('/interview/create')">
+          <span>
+            <el-icon><Plus /></el-icon>
+            新建面试
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+
+        <button class="quick-link" @click="$router.push('/interviews')">
+          <span>
+            <el-icon><List /></el-icon>
+            面试列表
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+
+        <button class="quick-link" @click="$router.push('/admin/prompts')">
+          <span>
+            <el-icon><Setting /></el-icon>
+            Prompt 配置
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+
+        <button class="quick-link" @click="$router.push('/admin/stages')">
+          <span>
+            <el-icon><Setting /></el-icon>
+            阶段配置
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+      </el-card>
+    </section>
+
+    <el-card shadow="never" class="panel recent-panel">
+      <template #header>
+        <div class="panel-header">
+          <span>最近面试</span>
+          <el-button link type="primary" @click="$router.push('/interviews')">查看全部</el-button>
+        </div>
+      </template>
+
+      <el-table :data="recentInterviews" v-loading="loading" stripe>
+        <el-table-column prop="candidate_name" label="候选人" min-width="140" />
+        <el-table-column prop="position" label="职位" min-width="180" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" min-width="170">
+          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+        </el-table-column>
+      </el-table>
+
+      <el-empty v-if="!loading && recentInterviews.length === 0" description="暂无面试记录" />
+    </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Plus, List, ChatDotRound, DocumentChecked, TrendCharts, Setting } from '@element-plus/icons-vue'
+import { ref, computed, onMounted } from 'vue'
+import { Plus, List, ChatDotRound, DocumentChecked, TrendCharts, Setting, VideoPlay, ArrowRight } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
 
 const interviewStore = useInterviewStore()
 
-const features = ref([
-  {
-    icon: ChatDotRound,
-    title: '智能对话',
-    description: 'AI驱动的自然对话体验，根据岗位需求智能提问',
-    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-  },
-  {
-    icon: DocumentChecked,
-    title: '自动评估',
-    description: '多维度自动评估候选人能力，生成详细报告',
-    color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-  },
-  {
-    icon: TrendCharts,
-    title: '数据分析',
-    description: '全面的面试数据分析，助力招聘决策',
-    color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-  }
-])
+const loading = ref(false)
+const interviews = ref([])
 
-const stats = ref([
-  { label: '总面试数', value: '-' },
-  { label: '进行中', value: '-' },
-  { label: '已完成', value: '-' },
-  { label: '平均分', value: '-' }
-])
+const stats = computed(() => {
+  const total = interviews.value.length
+  const created = interviews.value.filter(i => i.status === 'created').length
+  const inProgress = interviews.value.filter(i => i.status === 'in_progress').length
+  const completed = interviews.value.filter(i => i.status === 'completed').length
+  const cancelled = interviews.value.filter(i => i.status === 'cancelled').length
 
-onMounted(async () => {
-  try {
-    const interviews = await interviewStore.fetchInterviews()
-    const total = interviews.length
-    const inProgress = interviews.filter(i => i.status === 'in_progress').length
-    const completed = interviews.filter(i => i.status === 'completed').length
-
-    stats.value[0].value = total
-    stats.value[1].value = inProgress
-    stats.value[2].value = completed
-  } catch (error) {
-    console.error('获取统计数据失败', error)
+  return {
+    total,
+    created,
+    inProgress,
+    completed,
+    cancelled
   }
 })
+
+const completionRate = computed(() => {
+  if (!stats.value.total) return 0
+  return Math.round((stats.value.completed / stats.value.total) * 100)
+})
+
+const statusPercent = computed(() => {
+  const total = stats.value.total || 1
+  return {
+    created: Math.round((stats.value.created / total) * 100),
+    inProgress: Math.round((stats.value.inProgress / total) * 100),
+    completed: Math.round((stats.value.completed / total) * 100),
+    cancelled: Math.round((stats.value.cancelled / total) * 100)
+  }
+})
+
+const recentInterviews = computed(() => interviews.value.slice(0, 6))
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    interviews.value = await interviewStore.fetchInterviews()
+  } catch (error) {
+    console.error('获取首页数据失败', error)
+  } finally {
+    loading.value = false
+  }
+})
+
+function getStatusType(status) {
+  const typeMap = {
+    created: 'info',
+    in_progress: 'warning',
+    completed: 'success',
+    cancelled: 'danger'
+  }
+  return typeMap[status] || 'info'
+}
+
+function getStatusText(status) {
+  const textMap = {
+    created: '待开始',
+    in_progress: '进行中',
+    completed: '已完成',
+    cancelled: '已取消'
+  }
+  return textMap[status] || status
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
 </script>
 
 <style scoped lang="scss">
-.home {
-  max-width: 1000px;
-  margin: 0 auto;
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.hero-section {
-  text-align: center;
-  padding: 60px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 20px;
-  color: white;
-  margin-bottom: 40px;
-}
+.dashboard-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, #ffffff 0%, #f3f8ff 100%);
 
-.hero-title {
-  font-size: 42px;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
+  h1 {
+    margin: 0;
+    font-size: 24px;
+    color: var(--text-primary);
+  }
 
-.hero-subtitle {
-  font-size: 20px;
-  opacity: 0.9;
-  margin-bottom: 32px;
+  p {
+    margin: 8px 0 0;
+    color: var(--text-secondary);
+  }
 }
 
 .hero-actions {
   display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.features {
-  margin-bottom: 40px;
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.feature-card {
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s, box-shadow 0.3s;
+.kpi-card {
+  background: #ffffff;
+  border: 1px solid #d6dde8;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+    border-color: #bfcadb;
+    box-shadow: 0 10px 24px rgba(16, 24, 40, 0.1);
   }
 
-  h3 {
-    font-size: 20px;
-    margin: 16px 0 8px;
-  }
-
-  p {
-    color: #666;
+  .kpi-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #667085;
     font-size: 14px;
-    line-height: 1.6;
   }
-}
 
-.feature-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-  color: white;
-}
-
-.stats-section {
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-card {
-  text-align: center;
-  padding: 16px;
-
-  .stat-value {
-    font-size: 36px;
+  .kpi-value {
+    margin-top: 10px;
+    font-size: 40px;
+    line-height: 1.1;
     font-weight: 700;
-    color: #667eea;
-    margin-bottom: 8px;
+    color: #1e3a8a;
+  }
+}
+
+.dashboard-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.panel {
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.status-panel {
+  .status-item {
+    display: grid;
+    grid-template-columns: 74px 1fr 42px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    span {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    strong {
+      text-align: right;
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+  }
+}
+
+.quick-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.quick-link {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  .stat-label {
-    color: #666;
-    font-size: 14px;
+  &:hover {
+    background: #f1f3f5;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 992px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-main {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .hero-title {
-    font-size: 32px;
+  .dashboard-hero {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .hero-subtitle {
-    font-size: 16px;
+  .hero-actions {
+    width: 100%;
+
+    .el-button {
+      flex: 1;
+    }
   }
 }
 </style>

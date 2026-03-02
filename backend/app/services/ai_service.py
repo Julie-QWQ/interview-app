@@ -1,115 +1,175 @@
+﻿"""
+AI conversation service.
 """
-AI对话服务
-"""
-import openai
+
 import json
 import logging
-from typing import List, Dict, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import openai
+
 from .prompt_service import prompt_service
-from app.models.interview_stage import InterviewStage, InterviewProgress, STAGE_CONFIGS
+from app.models.interview_stage import InterviewProgress, stage_config_from_model
 
 logger = logging.getLogger(__name__)
 
 
 class AIService:
-    """AI对话服务"""
+    """AI conversation service."""
 
     def __init__(self, settings):
         self.settings = settings
+        self.prompts_log_path = Path(__file__).resolve().parents[2] / "logs" / "prompts.log"
         self.client = openai.OpenAI(
             api_key=settings.ai_api_key,
-            base_url=settings.ai_base_url
+            base_url=settings.ai_base_url,
         )
 
-    def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> str:
-        """
-        发起聊天完成请求
-
-        Args:
-            messages: 消息列表，格式 [{"role": "user", "content": "..."}]
-            **kwargs: 额外参数
-
-        Returns:
-            AI回复内容
-        """
+    def _log_prompt_payload(self, request_type: str, model: str, messages: List[Dict[str, str]], **kwargs):
+        """Append prompt payload to backend/logs/prompts.log before sending to LLM."""
         try:
-            response = self.client.chat.completions.create(
-                model=kwargs.get('model', self.settings.ai_model),
+            self.prompts_log_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "request_type": request_type,
+                "model": model,
+                "messages": messages,
+                "params": kwargs,
+            }
+            with open(self.prompts_log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=False))
+                f.write("\n")
+        except Exception as log_error:
+            logger.warning(f"Failed to write prompts.log: {log_error}")
+
+    def _get_llm_runtime_config(self) -> Dict:
+        """Load runtime LLM config from prompt settings."""
+        try:
+            return prompt_service.get_llm_config() or {}
+        except Exception as e:
+            logger.warning(f"Failed to load LLM runtime config, fallback to defaults: {e}")
+            return {}
+
+    def _build_progress_manager(self, interview_config: dict) -> InterviewProgress:
+        stage_models = prompt_service.get_stage_configs()
+        runtime_stages = [stage_config_from_model(s) for s in stage_models]
+        return InterviewProgress(runtime_stages, interview_config.get("duration_minutes", 30))
+
+    def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Send non-streaming chat completion request."""
+        try:
+            llm_config = self._get_llm_runtime_config()
+            model_override = llm_config.get("model_override") or ""
+
+            model = kwargs.get("model") or model_override or self.settings.ai_model
+            temperature = kwargs.get("temperature", llm_config.get("temperature", self.settings.ai_temperature))
+            max_tokens = kwargs.get("max_tokens", llm_config.get("max_tokens", 2000))
+            top_p = kwargs.get("top_p", llm_config.get("top_p", 1.0))
+            frequency_penalty = kwargs.get("frequency_penalty", llm_config.get("frequency_penalty", 0.0))
+            presence_penalty = kwargs.get("presence_penalty", llm_config.get("presence_penalty", 0.0))
+
+            self._log_prompt_payload(
+                request_type="chat_completion",
+                model=model,
                 messages=messages,
-                temperature=kwargs.get('temperature', self.settings.ai_temperature),
-                max_tokens=kwargs.get('max_tokens', 2000)
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stream=False,
+            )
+
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
             )
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"AI请求失败: {e}")
+            logger.error(f"AI request failed: {e}")
             raise
 
     def chat_completion_stream(self, messages: List[Dict[str, str]], **kwargs):
-        """
-        发起流式聊天完成请求
-
-        Args:
-            messages: 消息列表
-            **kwargs: 额外参数
-
-        Yields:
-            str: 每次生成的文本片段
-        """
+        """Send streaming chat completion request."""
         try:
-            stream = self.client.chat.completions.create(
-                model=kwargs.get('model', self.settings.ai_model),
+            llm_config = self._get_llm_runtime_config()
+            model_override = llm_config.get("model_override") or ""
+
+            model = kwargs.get("model") or model_override or self.settings.ai_model
+            temperature = kwargs.get("temperature", llm_config.get("temperature", self.settings.ai_temperature))
+            max_tokens = kwargs.get("max_tokens", llm_config.get("max_tokens", 2000))
+            top_p = kwargs.get("top_p", llm_config.get("top_p", 1.0))
+            frequency_penalty = kwargs.get("frequency_penalty", llm_config.get("frequency_penalty", 0.0))
+            presence_penalty = kwargs.get("presence_penalty", llm_config.get("presence_penalty", 0.0))
+
+            self._log_prompt_payload(
+                request_type="chat_completion_stream",
+                model=model,
                 messages=messages,
-                temperature=kwargs.get('temperature', self.settings.ai_temperature),
-                max_tokens=kwargs.get('max_tokens', 2000),
-                stream=True
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stream=True,
             )
-            
+
+            stream = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stream=True,
+            )
+
             for chunk in stream:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
-                    
+
         except Exception as e:
-            logger.error(f"AI流式请求失败: {e}")
+            logger.error(f"AI streaming request failed: {e}")
             raise
 
     def start_interview(self, interview_config: dict) -> str:
-        """开始面试，获取开场问题"""
-        # 获取基础系统提示
+        """Start interview and get opening question."""
         system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
-        
-        # 添加开场阶段的系统指令
-        stage_config = STAGE_CONFIGS[InterviewStage.WELCOME]
+        progress_manager = self._build_progress_manager(interview_config)
+        first_stage = progress_manager.get_first_stage()
+        stage_config = progress_manager.get_stage_info(first_stage)
         system_prompt += f"\n\n{stage_config.system_instruction}"
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "请开始面试，先做自我介绍并提出第一个问题。"}
+            {"role": "user", "content": "请开始面试，先做自我介绍并提出第一个问题。"},
         ]
 
         return self.chat_completion(messages)
 
-    def continue_interview(self, interview_config: dict, conversation_history: List[dict], 
-                          current_stage: str = None) -> str:
-        """继续面试对话（带阶段感知）"""
-        # 获取基础系统提示
+    def continue_interview(self, interview_config: dict, conversation_history: List[dict], current_stage: str = None) -> str:
+        """Continue interview with stage awareness."""
         system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
-        
-        # 确定当前阶段
-        progress_manager = InterviewProgress(interview_config.get('duration_minutes', 30))
-        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
-        
+
+        progress_manager = self._build_progress_manager(interview_config)
+        current_turn = len([m for m in conversation_history if m["role"] == "assistant"])
+
         if current_stage:
-            # 如果传入了当前阶段，使用它
-            stage = InterviewStage(current_stage)
+            stage = current_stage
         else:
-            # 否则根据轮次自动判断
             stage = progress_manager.determine_stage(current_turn)
-        
-        # 添加当前阶段的系统指令
-        stage_config = STAGE_CONFIGS[stage]
+
+        stage_config = progress_manager.get_stage_info(stage)
         system_prompt += f"\n\n{stage_config.system_instruction}"
-        
-        # 添加进度信息
+
         progress_info = progress_manager.calculate_progress(current_turn, stage)
         system_prompt += f"""
 
@@ -121,38 +181,35 @@ class AIService:
 
 请根据进度合理控制节奏和内容深度。"""
 
-        # 构建消息列表
         messages = [{"role": "system", "content": system_prompt}]
+        llm_config = self._get_llm_runtime_config()
+        context_messages = max(1, int(llm_config.get("context_messages", 20)))
 
-        # 添加历史对话
-        for msg in conversation_history[-20:]:  # 只保留最近20条消息
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
+        for msg in conversation_history[-context_messages:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
         return self.chat_completion(messages)
 
-    def continue_interview_stream(self, interview_config: dict, conversation_history: List[dict],
-                                  current_stage: str = None):
-        """继续面试对话（流式输出，带阶段感知）"""
-        # 获取基础系统提示
+    def continue_interview_stream(
+        self,
+        interview_config: dict,
+        conversation_history: List[dict],
+        current_stage: str = None,
+    ):
+        """Continue interview with stage awareness (streaming)."""
         system_prompt = prompt_service.get_interviewer_system_prompt(interview_config)
-        
-        # 确定当前阶段
-        progress_manager = InterviewProgress(interview_config.get('duration_minutes', 30))
-        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
-        
+
+        progress_manager = self._build_progress_manager(interview_config)
+        current_turn = len([m for m in conversation_history if m["role"] == "assistant"])
+
         if current_stage:
-            stage = InterviewStage(current_stage)
+            stage = current_stage
         else:
             stage = progress_manager.determine_stage(current_turn)
-        
-        # 添加当前阶段的系统指令
-        stage_config = STAGE_CONFIGS[stage]
+
+        stage_config = progress_manager.get_stage_info(stage)
         system_prompt += f"\n\n{stage_config.system_instruction}"
-        
-        # 添加进度信息
+
         progress_info = progress_manager.calculate_progress(current_turn, stage)
         system_prompt += f"""
 
@@ -164,47 +221,42 @@ class AIService:
 
 请根据进度合理控制节奏和内容深度。"""
 
-        # 构建消息列表
         messages = [{"role": "system", "content": system_prompt}]
+        llm_config = self._get_llm_runtime_config()
+        context_messages = max(1, int(llm_config.get("context_messages", 20)))
 
-        # 添加历史对话
-        for msg in conversation_history[-20:]:
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
+        for msg in conversation_history[-context_messages:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
         yield from self.chat_completion_stream(messages)
 
-    def determine_current_stage(self, conversation_history: List[dict], 
-                                duration_minutes: int = 30) -> InterviewStage:
-        """
-        根据对话历史确定当前应该处于的阶段
-        
-        Returns:
-            InterviewStage 枚举值
-        """
-        progress_manager = InterviewProgress(duration_minutes)
-        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
+    def determine_current_stage(self, interview_config: dict, conversation_history: List[dict], duration_minutes: int = 30) -> str:
+        """Determine current interview stage from conversation history."""
+        progress_manager = self._build_progress_manager(
+            {"duration_minutes": duration_minutes, **(interview_config or {})}
+        )
+        current_turn = len([m for m in conversation_history if m["role"] == "assistant"])
         return progress_manager.determine_stage(current_turn)
 
-    def get_interview_progress(self, conversation_history: List[dict], 
-                              current_stage: str, duration_minutes: int = 30) -> dict:
-        """获取面试进度信息"""
-        progress_manager = InterviewProgress(duration_minutes)
-        stage = InterviewStage(current_stage)
-        current_turn = len([m for m in conversation_history if m['role'] == 'assistant'])
-        return progress_manager.calculate_progress(current_turn, stage)
+    def get_interview_progress(
+        self,
+        conversation_history: List[dict],
+        current_stage: str,
+        duration_minutes: int = 30,
+        interview_config: dict = None,
+    ) -> dict:
+        """Get interview progress summary."""
+        progress_manager = self._build_progress_manager(
+            {"duration_minutes": duration_minutes, **(interview_config or {})}
+        )
+        current_turn = len([m for m in conversation_history if m["role"] == "assistant"])
+        return progress_manager.calculate_progress(current_turn, current_stage)
 
     def evaluate_interview(self, interview_config: dict, conversation_history: List[dict]) -> dict:
-        """评估面试表现"""
+        """Evaluate interview performance."""
         system_prompt = prompt_service.get_evaluator_system_prompt()
 
-        # 构建对话摘要
-        conversation_text = "\n".join([
-            f"{msg['role']}: {msg['content']}"
-            for msg in conversation_history
-        ])
+        conversation_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in conversation_history])
 
         user_prompt = f"""
         请根据以下面试对话内容，评估候选人的表现。
@@ -217,52 +269,76 @@ class AIService:
         面试对话：
         {conversation_text}
 
-        请按照系统提示中的格式返回JSON格式的评估报告。
+        请按照系统提示中的格式返回 JSON 格式的评估报告。
         """
 
         try:
+            llm_config = self._get_llm_runtime_config()
+            model = (llm_config.get("model_override") or "").strip() or self.settings.ai_model
+            eval_temperature = llm_config.get("evaluation_temperature", 0.3)
+            max_tokens = llm_config.get("max_tokens", 2000)
+            top_p = llm_config.get("top_p", 1.0)
+            frequency_penalty = llm_config.get("frequency_penalty", 0.0)
+            presence_penalty = llm_config.get("presence_penalty", 0.0)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+
+            self._log_prompt_payload(
+                request_type="evaluate_interview",
+                model=model,
+                messages=messages,
+                temperature=eval_temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                response_format={"type": "json_object"},
+                stream=False,
+            )
+
             response = self.client.chat.completions.create(
-                model=self.settings.ai_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,  # 评估时使用较低的温度以获得更稳定的结果
-                response_format={"type": "json_object"}
+                model=model,
+                messages=messages,
+                temperature=eval_temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                response_format={"type": "json_object"},
             )
 
             result = response.choices[0].message.content
             return json.loads(result)
         except Exception as e:
-            logger.error(f"评估失败: {e}")
-            # 返回默认评估
+            logger.error(f"Interview evaluation failed: {e}")
             return {
                 "overall_score": 70,
                 "dimension_scores": {
                     "technical": 70,
                     "problem_solving": 70,
                     "communication": 70,
-                    "learning_potential": 70
+                    "learning_potential": 70,
                 },
                 "strengths": ["完成面试"],
                 "weaknesses": ["评估系统暂时不可用"],
                 "recommendation": "需要进一步评估",
-                "feedback": "评估系统暂时不可用，请人工评估。"
+                "feedback": "评估系统暂时不可用，请人工评估。",
             }
 
 
-# 全局实例（稍后在应用初始化时创建）
 _ai_service: Optional[AIService] = None
 
 
 def get_ai_service() -> AIService:
-    """获取AI服务实例"""
+    """Get global AI service instance."""
     if _ai_service is None:
-        raise RuntimeError("AI服务未初始化")
+        raise RuntimeError("AI service not initialized")
     return _ai_service
 
 
 def init_ai_service(settings):
-    """初始化AI服务"""
+    """Initialize global AI service instance."""
     global _ai_service
     _ai_service = AIService(settings)

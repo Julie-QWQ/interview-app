@@ -25,6 +25,10 @@ def create_app(config_path=None):
 
     # 注册蓝图
     from .api import api_bp
+    # 注册画像路由（在注册蓝图之前）
+    from .api.profiles_flask import register_profile_routes
+    register_profile_routes(api_bp)
+
     app.register_blueprint(api_bp, url_prefix='/api')
 
     # 健康检查端点

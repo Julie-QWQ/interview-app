@@ -18,13 +18,19 @@ database:
 
 # AI服务配置 (可替换为任意兼容OpenAI API的服务)
 ai:
-  provider: "openai"  # openai, anthropic, 或其他兼容API
   api_key: "${AI_API_KEY}"
-  base_url: "${AI_BASE_URL:https://api.openai.com/v1}"
+  base_url: "${AI_BASE_URL:https://api.openai.com/v1}"  # 通过这个变量切换服务提供商
   model: "Qwen/Qwen2.5-7B-Instruct"  # SiliconFlow支持的模型
   temperature: 0.8  # 温度反应随机性，越低输出更确定
   max_tokens: 3000  # 限制回复长度，加快响应速度
   timeout: 30
+
+# ASR 语音识别配置 (使用 SiliconFlow ASR API)
+asr:
+  api_key: "${ASR_API_KEY}"
+  base_url: "${ASR_BASE_URL:https://api.siliconflow.cn/v1}"
+  model: "FunAudioLLM/SenseVoiceSmall"
+  enabled: true
 
 # CORS配置
 cors:

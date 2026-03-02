@@ -24,7 +24,28 @@ class Settings:
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
 
         with open(self.config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+
+        # 递归处理环境变量占位符 ${VAR:default}
+        return self._process_env_vars(config)
+
+    def _process_env_vars(self, config):
+        """递归处理配置中的环境变量占位符"""
+        if isinstance(config, dict):
+            return {k: self._process_env_vars(v) for k, v in config.items()}
+        elif isinstance(config, list):
+            return [self._process_env_vars(item) for item in config]
+        elif isinstance(config, str):
+            # 处理 ${VAR:default} 格式
+            import re
+            match = re.match(r'\$\{([^:}]+)(?::([^}]*))?\}', config)
+            if match:
+                var_name = match.group(1)
+                default_value = match.group(2) if match.group(2) is not None else ''
+                return os.getenv(var_name, default_value)
+            return config
+        else:
+            return config
 
     def _apply_env_overrides(self):
         """应用环境变量覆盖"""
@@ -45,6 +66,12 @@ class Settings:
             self._config['database']['user'] = db_user
         if db_password := os.getenv("DB_PASSWORD"):
             self._config['database']['password'] = db_password
+
+        # ASR 配置从环境变量读取
+        if asr_api_key := os.getenv("ASR_API_KEY"):
+            self._config['asr']['api_key'] = asr_api_key
+        if asr_base_url := os.getenv("ASR_BASE_URL"):
+            self._config['asr']['base_url'] = asr_base_url
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值，支持点号分隔的路径"""
@@ -107,6 +134,27 @@ class Settings:
     @property
     def ai_temperature(self) -> float:
         return self._config['ai'].get('temperature', 0.7)
+
+    # ASR 配置属性
+    @property
+    def asr_api_key(self) -> str:
+        # 默认复用 AI API Key
+        asr_config = self._config.get('asr', {})
+        return asr_config.get('api_key', '') or self.ai_api_key
+
+    @property
+    def asr_base_url(self) -> str:
+        # 默认复用 AI Base URL
+        asr_config = self._config.get('asr', {})
+        return asr_config.get('base_url', '') or self.ai_base_url
+
+    @property
+    def asr_model(self) -> str:
+        return self._config.get('asr', {}).get('model', 'whisper-1')
+
+    @property
+    def asr_enabled(self) -> bool:
+        return self._config.get('asr', {}).get('enabled', True)
 
     @property
     def cors_origins(self) -> list:

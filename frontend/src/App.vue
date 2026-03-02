@@ -1,82 +1,155 @@
-<template>
+﻿<template>
   <div id="app">
-    <el-container class="app-container">
-      <el-header class="app-header">
-        <div class="header-content">
-          <h1 class="app-title">
-            <el-icon><ChatDotRound /></el-icon>
-            AI面试系统
-          </h1>
-          <nav class="app-nav">
-            <router-link to="/" class="nav-link">首页</router-link>
-            <router-link to="/interviews" class="nav-link">面试列表</router-link>
-          </nav>
+    <el-container class="admin-shell">
+      <el-aside v-if="!isMainInterviewView" class="sidebar">
+        <div class="brand">
+          <h1>AI 面试系统</h1>
+          <p>后台管理</p>
         </div>
-      </el-header>
-      <el-main class="app-main">
-        <router-view />
+
+        <nav class="sidebar-nav">
+          <router-link
+            v-for="item in navItems"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </nav>
+      </el-aside>
+
+      <el-main :class="['main-content', { 'main-content--interview': isMainInterviewView }]">
+        <section :class="['content-body', { 'content-body--interview': isMainInterviewView, 'content-body--plain': !isMainInterviewView }]">
+          <router-view />
+        </section>
       </el-main>
     </el-container>
   </div>
 </template>
 
 <script setup>
-import { ChatDotRound } from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { DataLine, ChatLineRound, Collection, User, Camera } from '@element-plus/icons-vue'
+
+const route = useRoute()
+
+const navItems = [
+  { label: '仪表盘', path: '/', icon: DataLine },
+  { label: '面试管理', path: '/interviews', icon: ChatLineRound },
+  { label: 'Prompt 配置', path: '/admin/prompts', icon: Collection },
+  { label: '阶段配置', path: '/admin/stages', icon: DataLine },
+  { label: '画像管理', path: '/admin/profiles', icon: User },
+  { label: '摄像头测试', path: '/test/camera', icon: Camera }
+]
+
+const isMainInterviewView = computed(() => route.path.startsWith('/interviews/'))
 </script>
 
 <style scoped>
-.app-container {
+.admin-shell {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--layout-bg);
 }
 
-.app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 0;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-}
-
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
+.sidebar {
+  width: 252px;
+  background: #f6f7f9;
+  border-right: 1px solid var(--line-color);
+  padding: 20px 14px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.app-title {
-  font-size: 24px;
+.brand {
+  padding: 8px 8px 4px;
+}
+
+.brand h1 {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  margin: 0;
+  color: #161a22;
+}
+
+.brand p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #8a93a3;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: #5a6372;
   font-weight: 600;
+  font-size: 15px;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0;
+  transition: all 0.16s ease;
 }
 
-.app-nav {
-  display: flex;
-  gap: 20px;
+.nav-item:hover {
+  background: #eceef2;
+  color: #1f2937;
 }
 
-.nav-link {
-  color: white;
-  text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  transition: background 0.3s;
+.nav-item.router-link-active {
+  background: #111318;
+  color: #ffffff;
 }
 
-.nav-link:hover,
-.nav-link.router-link-active {
-  background: rgba(255, 255, 255, 0.2);
+.main-content {
+  padding: 20px 24px 24px;
+  overflow: auto;
 }
 
-.app-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+.main-content--interview {
+  padding: 0;
+}
+
+.content-body {
+  margin-top: 14px;
+}
+
+.content-body--interview {
+  margin-top: 0;
+}
+
+.content-body--plain {
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .admin-shell {
+    display: block;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--line-color);
+  }
+
+  .sidebar-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-content {
+    padding: 14px;
+  }
 }
 </style>

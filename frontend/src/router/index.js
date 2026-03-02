@@ -20,6 +20,26 @@ const routes = [
     path: '/interview/create',
     name: 'CreateInterview',
     component: () => import('@/views/CreateInterview.vue')
+  },
+  {
+    path: '/admin/prompts',
+    name: 'PromptConfig',
+    component: () => import('@/views/PromptConfig.vue')
+  },
+  {
+    path: '/admin/stages',
+    name: 'StageConfig',
+    component: () => import('@/views/StageConfig.vue')
+  },
+  {
+    path: '/admin/profiles',
+    name: 'ProfileManagement',
+    component: () => import('@/views/ProfileManagement.vue')
+  },
+  {
+    path: '/test/camera',
+    name: 'CameraTest',
+    component: () => import('@/views/CameraTest.vue')
   }
 ]
 

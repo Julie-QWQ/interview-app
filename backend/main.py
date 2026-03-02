@@ -4,6 +4,10 @@ Flask应用入口文件
 import sys
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载 .env 文件
+load_dotenv()
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
