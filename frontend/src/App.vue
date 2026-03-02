@@ -3,8 +3,8 @@
     <el-container class="admin-shell">
       <el-aside v-if="!isMainInterviewView" class="sidebar">
         <div class="brand">
-          <h1>AI 面试系统</h1>
-          <p>后台管理</p>
+          <h1>OfferMaster</h1>
+          <p>AI面试系统</p>
         </div>
 
         <nav class="sidebar-nav">

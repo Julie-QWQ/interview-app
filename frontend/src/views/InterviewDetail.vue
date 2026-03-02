@@ -1,6 +1,6 @@
 ﻿<template>
   <div class="interview-detail-wrapper">
-    <!-- 椤堕儴瀵艰埅鏍?-->
+    <!-- 顶部导航栏 -->
     <div class="top-navbar">
       <div class="navbar-left">
         <el-button @click="$router.back()" class="back-button" circle>
@@ -21,7 +21,7 @@
           size="large"
         >
           <el-icon><VideoPlay /></el-icon>
-          寮€濮嬮潰璇?
+          开始面试
         </el-button>
         <el-button
           v-if="currentInterview?.status === 'in_progress'"
@@ -30,28 +30,28 @@
           size="large"
         >
           <el-icon><Check /></el-icon>
-          瀹屾垚闈㈣瘯
+          完成面试
         </el-button>
       </div>
     </div>
 
-    <!-- 涓诲唴瀹瑰尯鍩?- 涓夊垪甯冨眬 -->
+    <!-- 主要内容区域 - 三列布局 -->
     <div class="main-content">
-      <!-- 宸︿晶鍒?- 瑙嗛鍖哄煙 -->
+      <!-- 左侧列 - 视频区域 -->
       <div class="left-column">
-        <!-- 闈㈣瘯瀹樻暟瀛椾汉 -->
+        <!-- 面试官数字人 -->
         <div class="video-card digital-human-card">
           <div class="video-placeholder">
             <el-icon><Avatar /></el-icon>
-            <span class="placeholder-label">闈㈣瘯瀹樻暟瀛椾汉</span>
-            <span class="placeholder-hint">绛夊緟鎺ュ叆...</span>
+            <span class="placeholder-label">面试官数字人</span>
+            <span class="placeholder-hint">等待接入...</span>
           </div>
         </div>
 
-        <!-- 鍒嗛殧绾?-->
+        <!-- 分隔线 -->
         <div class="video-divider"></div>
 
-        <!-- 鐢ㄦ埛鎽勫儚澶?-->
+        <!-- 用户摄像头 -->
         <div class="video-card user-camera-card">
           <UserCamera
             ref="userCameraRef"
@@ -64,14 +64,14 @@
         </div>
       </div>
 
-      <!-- 涓棿鍒?- 瀵硅瘽妗?-->
+      <!-- 中间列 - 对话框 -->
       <div class="center-column">
         <div class="chat-container">
-          <!-- 瀵硅瘽澶撮儴 -->
+          <!-- 对话头部 -->
           <div class="chat-header">
             <div class="chat-title">
               <el-icon><ChatDotRound /></el-icon>
-              <span>闈㈣瘯瀵硅瘽</span>
+              <span>面试对话</span>
             </div>
             <div class="chat-controls">
               <el-button
@@ -79,7 +79,7 @@
                 :type="isMuted ? 'warning' : 'default'"
                 size="small"
                 @click="toggleMute"
-                :title="isMuted ? '鍙栨秷闈欓煶' : '闈欓煶'"
+                :title="isMuted ? '取消静音' : '静音'"
                 circle
               />
               <el-tag v-if="currentStage" type="info" class="stage-tag">
@@ -88,11 +88,11 @@
             </div>
           </div>
 
-          <!-- 闃舵杩涘害鏉?-->
+          <!-- 阶段进度条 -->
           <div v-if="stageProgress" class="stage-progress-bar">
             <div class="stage-info">
               <span class="stage-label">{{ stageProgress.stage_name }}</span>
-              <span class="stage-meta">{{ stageProgress.turn_in_stage }}/{{ stageProgress.stage_max_turns }} 闂</span>
+              <span class="stage-meta">{{ stageProgress.turn_in_stage }}/{{ stageProgress.stage_max_turns }} 问题</span>
             </div>
             <el-progress
               :percentage="stageProgress.overall_progress"
@@ -100,12 +100,22 @@
               :show-text="true"
             />
             <div class="progress-text">
-              鎬昏繘搴? {{ stageProgress.overall_progress }}% | 鍓╀綑绾?{{ stageProgress.remaining_turns }} 杞?
+              总进度 {{ stageProgress.overall_progress }}% | 剩余约 {{ stageProgress.remaining_turns }} 轮
             </div>
           </div>
 
-          <!-- 瀵硅瘽娑堟伅鍖哄煙 -->
+          <!-- 对话消息区域 -->
           <div class="messages-container" ref="messagesContainer">
+            <div v-if="isStartingInterview" class="startup-feedback">
+              <div class="startup-feedback-title">正在生成开场问题...</div>
+              <div class="startup-feedback-subtitle">LLM 正在思考，请稍候</div>
+              <div class="startup-feedback-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+
             <div
               v-for="(message, index) in messages"
               :key="message.id || index"
@@ -143,15 +153,15 @@
                   title="回到这个状态"
                 >
                   <el-icon><RefreshLeft /></el-icon>
-                  <span>鍥炴函</span>
+                  <span>回溯</span>
                 </div>
               </div>
             </div>
 
-            <el-empty v-if="messages.length === 0" description="鏆傛棤瀵硅瘽璁板綍" />
+            <el-empty v-if="messages.length === 0" description="暂无对话记录" />
           </div>
 
-          <!-- 杈撳叆鍖哄煙 -->
+          <!-- 输入区域 -->
           <div class="input-area">
             <el-alert
               v-if="currentInterview?.status !== 'in_progress'"
@@ -169,14 +179,14 @@
                 v-model="inputMessage"
                 type="textarea"
                 :rows="3"
-                placeholder="璇疯緭鍏ユ偍鐨勫洖绛?.."
+                placeholder="请输入您的回答..."
                 :disabled="interviewStore.thinking"
                 @keydown.enter.ctrl="handleSend"
               />
 
               <div v-if="isListening || isTranscribing" class="interim-text">
                 <el-icon class="is-loading"><Microphone /></el-icon>
-                <span>{{ isListening ? '姝ｅ湪褰曢煶...' : '姝ｅ湪璇嗗埆...' }}</span>
+                <span>{{ isListening ? '正在录音...' : '正在识别...' }}</span>
               </div>
 
               <div class="input-actions">
@@ -189,20 +199,20 @@
                     @click="toggleSpeechRecognition"
                     :class="{ 'listening': isListening }"
                   >
-                    {{ isListening ? '鍋滄褰曢煶' : (isTranscribing ? '璇嗗埆涓?..' : '鐐瑰嚮璇磋瘽') }}
+                    {{ isListening ? '停止录音' : (isTranscribing ? '识别中...' : '点击说话') }}
                   </el-button>
 
                   <span class="hint">
                     <template v-if="isTranscribing">
                       <el-icon class="is-loading"><Loading /></el-icon>
-                      姝ｅ湪璇嗗埆...
+                      正在识别...
                     </template>
                     <template v-else-if="interviewStore.thinking">
                       <el-icon class="is-loading"><Loading /></el-icon>
-                      AI 姝ｅ湪鎬濊€?..
+                      AI 正在思考...
                     </template>
                     <template v-else>
-                      Ctrl + Enter 鍙戦€?
+                      Ctrl + Enter 发送
                     </template>
                   </span>
                 </div>
@@ -220,13 +230,13 @@
         </div>
       </div>
 
-      <!-- 鍙充晶鍒?- 淇℃伅闈㈡澘 -->
+      <!-- 右侧列 - 信息面板 -->
       <div class="right-column">
-        <!-- 闈㈣瘯淇℃伅 -->
+        <!-- 面试信息 -->
         <div class="info-panel">
           <div class="panel-title">
             <el-icon><Document /></el-icon>
-            <span>闈㈣瘯淇℃伅</span>
+            <span>面试信息</span>
           </div>
           <div class="info-list">
             <div class="info-item">
@@ -234,11 +244,11 @@
               <span class="value">{{ currentInterview?.position }}</span>
             </div>
             <div class="info-item">
-              <span class="label">鎶€鑳介鍩燂細</span>
+              <span class="label">技能领域：</span>
               <span class="value">{{ getSkillDomainText(currentInterview?.skill_domain) }}</span>
             </div>
             <div class="info-item">
-              <span class="label">鎶€鑳斤細</span>
+              <span class="label">技能：</span>
               <div class="skills">
                 <el-tag
                   v-for="skill in currentInterview?.skills"
@@ -255,20 +265,20 @@
             </div>
             <div class="info-item">
               <span class="label">预计时长：</span>
-              <span class="value">{{ currentInterview?.duration_minutes }} 鍒嗛挓</span>
+              <span class="value">{{ currentInterview?.duration_minutes }} 分钟</span>
             </div>
           </div>
         </div>
 
-        <!-- 鍒嗛殧绾?-->
+        <!-- 分隔线 -->
         <div class="panel-divider"></div>
 
-        <!-- 闈㈣瘯闃舵璁″垝 -->
+        <!-- 面试阶段计划 -->
         <div class="stages-panel">
           <div class="panel-title">
             <el-icon><List /></el-icon>
-            <span>闈㈣瘯闃舵</span>
-            <el-tag size="small" type="info">{{ totalDuration }}鍒嗛挓</el-tag>
+            <span>面试阶段</span>
+            <el-tag size="small" type="info">{{ totalDuration }}分钟</el-tag>
           </div>
           <div class="stages-content">
             <el-steps direction="vertical" :space="60" :active="getStageStepIndex(currentStage)">
@@ -285,14 +295,14 @@
                       :type="getStageStepType(stage.stage)"
                       v-if="stage.stage === currentStage"
                     >
-                      褰撳墠
+                      当前
                     </el-tag>
                   </div>
                 </template>
                 <template #description>
                   <div class="stage-step-desc">
                     <div class="stage-meta">
-                      <span>{{ stage.time_allocation }}鍒嗛挓</span>
+                      <span>{{ stage.time_allocation }}分钟</span>
                       <span>{{ stage.min_turns }}-{{ stage.max_turns }} 轮</span>
                     </div>
                     <p class="stage-description">{{ stage.description }}</p>
@@ -303,10 +313,10 @@
           </div>
         </div>
 
-        <!-- 鍒嗛殧绾?-->
+        <!-- 分隔线 -->
         <div class="panel-divider"></div>
 
-        <!-- 娴佺▼鍙鍖栨寜閽?-->
+        <!-- 流程可视化按钮 -->
         <div class="graph-panel">
           <el-button
             type="primary"
@@ -315,31 +325,31 @@
             size="large"
           >
             <el-icon><Share /></el-icon>
-            鏌ョ湅瀵硅瘽娴佺▼
+            查看对话流程
           </el-button>
         </div>
       </div>
     </div>
 
-    <!-- 瀵硅瘽娴佺▼寮圭獥 - 鍏ㄥ睆妯″紡 -->
+    <!-- 对话流程弹窗 - 全屏模式 -->
     <teleport to="body">
       <transition name="fullscreen-fade">
         <div v-if="showGraphDialog" class="fullscreen-graph-overlay">
-          <!-- 鑷畾涔夋爣棰樻爮 -->
+          <!-- 自定义标题栏 -->
           <div class="fullscreen-dialog-header">
             <div class="header-left">
               <h2>对话流程可视化</h2>
-              <p class="header-subtitle">瀹炴椂灞曠ず闈㈣瘯瀵硅瘽鐨勫畬鏁存祦绋嬪拰鍒嗘敮</p>
+              <p class="header-subtitle">实时展示面试对话的完整流程和分支</p>
             </div>
             <div class="header-right">
               <el-button size="large" @click="showGraphDialog = false">
                 <el-icon><ArrowLeft /></el-icon>
-                杩斿洖闈㈣瘯
+                返回面试
               </el-button>
             </div>
           </div>
 
-          <!-- 寮圭獥鍐呭 -->
+          <!-- 弹窗内容 -->
           <div class="fullscreen-dialog-content">
             <div v-if="currentMessageIndex >= 0" class="rewind-notice-dialog">
               <el-alert
@@ -348,14 +358,14 @@
                 show-icon
               >
                 <template #default>
-                  褰撳墠鍥炴函鍒扮 {{ currentMessageIndex + 1 }} 鏉℃秷鎭?鍚庣画娑堟伅宸查殣钘?
+                  当前回溯到第 {{ currentMessageIndex + 1 }} 条消息，后续消息已隐藏。
                   <el-button
                     type="primary"
                     size="small"
                     link
                     @click="handleRestoreAllMessages"
                   >
-                    鎭㈠鍏ㄩ儴
+                    恢复全部
                   </el-button>
                 </template>
               </el-alert>
@@ -406,6 +416,7 @@ const isSpeechSupported = ref(false)
 const asrServiceAvailable = ref(false)  // ASR 鏈嶅姟鏄惁鍙敤
 
 const loading = ref(false)
+const isStartingInterview = ref(false)
 const currentInterview = ref(null)
 const messages = computed(() => {
   // 鐩存帴杩斿洖 store 涓殑 messages锛屽畠宸茬粡鏄綋鍓嶈矾寰勭殑绾挎€ц〃绀?
@@ -512,7 +523,7 @@ async function loadStagesConfig() {
     const data = await interviewApi.getStagesConfig()
     stagesConfig.value = data.stages
   } catch (error) {
-    console.error('鍔犺浇闃舵閰嶇疆澶辫触', error)
+    console.error('加载阶段配置失败', error)
   }
 }
 
@@ -523,7 +534,7 @@ async function loadInterviewDetail() {
     currentInterview.value = data
     // messages 鐜板湪浠?computed 鑾峰彇,涓嶉渶瑕佹墜鍔ㄨ缃?
   } catch (error) {
-    ElMessage.error('鍔犺浇闈㈣瘯璇︽儏澶辫触')
+    ElMessage.error('加载面试详情失败')
     console.error(error)
   } finally {
     loading.value = false
@@ -547,6 +558,7 @@ async function handleStart() {
       type: 'info'
     })
 
+    isStartingInterview.value = true
     await interviewStore.startInterview(interviewId.value)
     ElMessage.success('面试已开始')
     await loadInterviewDetail()
@@ -564,6 +576,8 @@ async function handleStart() {
       console.error('开始面试失败', error)
       ElMessage.error('开始面试失败，请重试')
     }
+  } finally {
+    isStartingInterview.value = false
   }
 }
 
@@ -620,7 +634,7 @@ async function handleComplete() {
     await loadEvaluation()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('瀹屾垚闈㈣瘯澶辫触', error)
+      console.error('完成面试失败', error)
     }
   } finally {
     loading.value = false
@@ -698,9 +712,9 @@ function getSkillDomainText(domain) {
     frontend: '前端开发',
     backend: '后端开发',
     fullstack: '全栈开发',
-    ai_ml: 'AI/鏈哄櫒瀛︿範',
-    data_engineering: '鏁版嵁宸ョ▼',
-    other: '鍏朵粬'
+    ai_ml: 'AI/机器学习',
+    data_engineering: '数据工程',
+    other: '其他'
   }
   return textMap[domain] || domain
 }
@@ -708,9 +722,9 @@ function getSkillDomainText(domain) {
 function getDimensionLabel(key) {
   const labelMap = {
     technical: '技术能力',
-    problem_solving: '闂瑙ｅ喅',
+    problem_solving: '问题解决',
     communication: '沟通表达',
-    learning_potential: '瀛︿範娼滃姏'
+    learning_potential: '学习潜力'
   }
   return labelMap[key] || key
 }
@@ -947,7 +961,7 @@ function handleLocateMessage(messageId) {
       }
     })
   } else {
-    ElMessage.warning('娑堟伅涓嶅湪褰撳墠鏄剧ず鐨勫垎鏀腑')
+    ElMessage.warning('消息不在当前显示的分支中')
   }
 }
 
@@ -1123,6 +1137,59 @@ body.interview-immersive-mode .app-container {
 .fullscreen-fade-enter-from,
 .fullscreen-fade-leave-to {
   opacity: 0;
+}
+
+.startup-feedback {
+  margin: 8px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #d9ecff;
+  background: #ecf5ff;
+  border-radius: 10px;
+  color: #1f2937;
+}
+
+.startup-feedback-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.startup-feedback-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.startup-feedback-dots {
+  margin-top: 8px;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.startup-feedback-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #409eff;
+  animation: startupDot 1.2s infinite ease-in-out;
+}
+
+.startup-feedback-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.startup-feedback-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes startupDot {
+  0%, 80%, 100% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>
 

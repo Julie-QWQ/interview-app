@@ -47,6 +47,15 @@ class InterviewPromptConfig(BaseModel):
         default="你是一位专业的技术面试官，具有丰富的招聘经验。你的任务是进行技术面试，评估候选人的技术能力、问题解决能力和沟通能力。",
         description="基础系统提示",
     )
+    evaluator_system_prompt: str = Field(
+        default=(
+            "你是一位客观、严谨的技术面试评估专家。"
+            "请基于完整对话给出结构化评估，必须只返回 JSON 对象，"
+            "字段包含：overall_score, dimension_scores, strengths, weaknesses, recommendation, feedback。"
+            "评分范围 0-100，结论应可解释且与对话证据一致。"
+        ),
+        description="评估器系统提示",
+    )
     stages: Dict[str, StagePromptConfig] = Field(default_factory=dict, description="各阶段配置")
     llm: LLMRuntimeConfig = Field(default_factory=LLMRuntimeConfig, description="LLM 对话参数")
 
@@ -59,6 +68,12 @@ class InterviewPromptConfig(BaseModel):
 
 DEFAULT_PROMPT_CONFIG = InterviewPromptConfig(
     base_system_prompt="你是一位专业的技术面试官，具有丰富的招聘经验。你的任务是进行技术面试，评估候选人的技术能力、问题解决能力和沟通能力。",
+    evaluator_system_prompt=(
+        "你是一位客观、严谨的技术面试评估专家。"
+        "请基于完整对话给出结构化评估，必须只返回 JSON 对象，"
+        "字段包含：overall_score, dimension_scores, strengths, weaknesses, recommendation, feedback。"
+        "评分范围 0-100，结论应可解释且与对话证据一致。"
+    ),
     stages={
         "welcome": StagePromptConfig(
             stage="welcome",

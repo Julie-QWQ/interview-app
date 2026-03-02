@@ -204,7 +204,7 @@ def delete_interview(interview_id: int):
             return jsonify({'error': 'Interview not found'}), 404
 
         logger.info(f"鍒犻櫎闈㈣瘯鎴愬姛: {interview_id}")
-        return jsonify({'message': '鍒犻櫎鎴愬姛'}), 200
+        return jsonify({'message': '删除成功'}), 200
 
     except Exception as e:
         logger.error(f"鍒犻櫎闈㈣瘯澶辫触: {e}")
@@ -281,7 +281,7 @@ def complete_interview(interview_id: int):
             return jsonify({'error': 'Interview not found'}), 404
 
         if interview['status'] != InterviewStatus.IN_PROGRESS:
-            return jsonify({'error': '闈㈣瘯鐘舵€佷笉姝ｇ‘'}), 400
+            return jsonify({'error': '面试状态不正确'}), 400
 
         # 鑾峰彇瀵硅瘽鍘嗗彶
         current_message_id = interview.get('current_message_id')
@@ -308,9 +308,9 @@ def complete_interview(interview_id: int):
         # 鏇存柊鐘舵€佷负瀹屾垚
         database.update_interview_status(interview_id, InterviewStatus.COMPLETED)
 
-        logger.info(f"瀹屾垚闈㈣瘯: {interview_id}, 璇勪及鍒嗘暟: {evaluation['overall_score']}")
+        logger.info(f"????: {interview_id}, ????: {evaluation['overall_score']}")
         return jsonify({
-            'message': '闈㈣瘯瀹屾垚',
+            'message': '????',
             'evaluation': evaluation
         }), 200
 
@@ -329,14 +329,14 @@ def chat(interview_id: int):
         branch_id = data.get('branch_id', 'main')  # 鍙€夛細鍒嗘敮ID锛岄粯璁や负 'main'
 
         if not user_message:
-            return jsonify({'error': '娑堟伅鍐呭涓嶈兘涓虹┖'}), 400
+            return jsonify({'error': '消息内容不能为空'}), 400
 
         interview = database.get_interview(interview_id)
         if not interview:
             return jsonify({'error': 'Interview not found'}), 404
 
         if interview['status'] != InterviewStatus.IN_PROGRESS:
-            return jsonify({'error': '闈㈣瘯鏈繘琛屼腑'}), 400
+            return jsonify({'error': '面试未进行中'}), 400
 
         # 淇濆瓨鐢ㄦ埛娑堟伅锛堟敮鎸佹爲褰㈢粨鏋勶級
         user_message_id = database.create_message(
@@ -410,14 +410,14 @@ def chat_stream(interview_id: int):
         enable_tts = data.get('enable_tts', True)  # 鏄惁鍚敤 TTS锛岄粯璁ゅ惎鐢?
 
         if not user_message:
-            return jsonify({'error': '娑堟伅鍐呭涓嶈兘涓虹┖'}), 400
+            return jsonify({'error': '消息内容不能为空'}), 400
 
         interview = database.get_interview(interview_id)
         if not interview:
             return jsonify({'error': 'Interview not found'}), 404
 
         if interview['status'] != InterviewStatus.IN_PROGRESS:
-            return jsonify({'error': '闈㈣瘯鏈繘琛屼腑'}), 400
+            return jsonify({'error': '面试未进行中'}), 400
 
         # 淇濆瓨鐢ㄦ埛娑堟伅锛堟敮鎸佹爲褰㈢粨鏋勶級
         user_message_id = database.create_message(
@@ -599,7 +599,7 @@ def update_prompt_config():
         database.save_prompt_config(config.model_dump(), 'default')
         
         logger.info("Prompt config updated")
-        return jsonify({'message': '閰嶇疆淇濆瓨鎴愬姛'}), 200
+        return jsonify({'message': '配置保存成功'}), 200
         
     except Exception as e:
         logger.error(f"鏇存柊Prompt閰嶇疆澶辫触: {e}")
@@ -676,9 +676,9 @@ def update_current_message(interview_id: int):
 
         if success:
             logger.info(f"鏇存柊闈㈣瘯 {interview_id} 鐨勫綋鍓嶆秷鎭妭鐐逛负 {message_id}")
-            return jsonify({'message': '鏇存柊鎴愬姛'}), 200
+            return jsonify({'message': '更新成功'}), 200
         else:
-            return jsonify({'error': '鏇存柊澶辫触'}), 500
+            return jsonify({'error': '更新失败'}), 500
 
     except Exception as e:
         logger.error(f"鏇存柊褰撳墠娑堟伅鑺傜偣澶辫触: {e}")
@@ -699,7 +699,7 @@ def upload_resume():
     try:
         # 妫€鏌ユ槸鍚︽湁鏂囦欢
         if 'file' not in request.files:
-            return jsonify({'error': '娌℃湁涓婁紶鏂囦欢'}), 400
+            return jsonify({'error': '没有上传文件'}), 400
 
         file = request.files['file']
 
@@ -717,7 +717,7 @@ def upload_resume():
         file.seek(0)
 
         if file_size > MAX_FILE_SIZE:
-            return jsonify({'error': f'鏂囦欢澶у皬涓嶈兘瓒呰繃 {MAX_FILE_SIZE // (1024*1024)}MB'}), 400
+            return jsonify({'error': f'文件大小不能超过 {MAX_FILE_SIZE // (1024*1024)}MB'}), 400
 
         # 鐢熸垚鍞竴鏂囦欢鍚?
         original_filename = secure_filename(file.filename)
@@ -833,7 +833,7 @@ def create_snapshot(interview_id: int):
         description = data.get('description', '')
 
         if not name:
-            return jsonify({'error': '蹇収鍚嶇О涓嶈兘涓虹┖'}), 400
+            return jsonify({'error': '快照名称不能为空'}), 400
 
         # 鑾峰彇褰撳墠闈㈣瘯鐘舵€?
         interview = database.get_interview(interview_id)
@@ -876,9 +876,9 @@ def create_snapshot(interview_id: int):
 
         snapshot_id = database.create_snapshot(snapshot_params)
 
-        logger.info(f"鍒涘缓蹇収鎴愬姛: interview_id={interview_id}, snapshot_id={snapshot_id}")
+        logger.info(f"????: snapshot_id={snapshot_id}")
         return jsonify({
-            'message': '蹇収鍒涘缓鎴愬姛',
+            'message': '??????',
             'snapshot_id': snapshot_id
         }), 201
 
@@ -971,9 +971,9 @@ def load_snapshot(snapshot_id: int):
         # 娉ㄦ剰锛氳繖閲屾垜浠彧鏄繑鍥炲揩鐓ф暟鎹紝瀹為檯鐨?鎭㈠"鐢卞墠绔喅瀹氬浣曞鐞?
         # 鍙互閫夋嫨鍒涘缓鏂伴潰璇曟垨瑕嗙洊鐜版湁闈㈣瘯
 
-        logger.info(f"鍔犺浇蹇収: snapshot_id={snapshot_id}")
+        logger.info(f"????: snapshot_id={snapshot_id}")
         return jsonify({
-            'message': '蹇収鍔犺浇鎴愬姛',
+            'message': '??????',
             'snapshot_id': snapshot_id,
             'original_interview_id': original_interview_id,
             'data': snapshot_data
@@ -992,8 +992,8 @@ def delete_snapshot(snapshot_id: int):
         if not success:
             return jsonify({'error': 'Snapshot not found'}), 404
 
-        logger.info(f"鍒犻櫎蹇収鎴愬姛: snapshot_id={snapshot_id}")
-        return jsonify({'message': '蹇収鍒犻櫎鎴愬姛'}), 200
+        logger.info(f"????: snapshot_id={snapshot_id}")
+        return jsonify({'message': '快照删除成功'}), 200
 
     except Exception as e:
         logger.error(f"鍒犻櫎蹇収澶辫触: {e}")
@@ -1017,18 +1017,18 @@ def transcribe_audio():
 
         audio_file = request.files['audio']
         if audio_file.filename == '':
-            return jsonify({'error': '鏈€夋嫨鏂囦欢'}), 400
+            return jsonify({'error': '未选择文件'}), 400
 
         # 璇诲彇闊抽鏁版嵁
         audio_data = audio_file.read()
 
         if len(audio_data) == 0:
-            return jsonify({'error': '闊抽鏂囦欢涓虹┖'}), 400
+            return jsonify({'error': '音频文件为空'}), 400
 
         # 闄愬埗闊抽澶у皬 (鏈€澶?25MB)
         MAX_AUDIO_SIZE = 25 * 1024 * 1024
         if len(audio_data) > MAX_AUDIO_SIZE:
-            return jsonify({'error': f'闊抽鏂囦欢涓嶈兘瓒呰繃 {MAX_AUDIO_SIZE // (1024*1024)}MB'}), 400
+            return jsonify({'error': f'音频文件不能超过 {MAX_AUDIO_SIZE // (1024*1024)}MB'}), 400
 
         logger.info(f"鏀跺埌闊抽鏂囦欢, 澶у皬: {len(audio_data)} bytes")
 
@@ -1044,7 +1044,7 @@ def transcribe_audio():
 
     except Exception as e:
         logger.error(f"璇煶璇嗗埆澶辫触: {e}")
-        return jsonify({'error': f'璇煶璇嗗埆澶辫触: {str(e)}'}), 500
+        return jsonify({'error': f'语音识别失败: {str(e)}'}), 500
 
 
 @api_bp.route('/asr/status', methods=['GET'])
@@ -1063,7 +1063,7 @@ def get_asr_status():
             return jsonify({
                 'available': False,
                 'provider': None,
-                'message': 'ASR 鏈嶅姟鏈厤缃?璇锋鏌?OPENAI_API_KEY 鐜鍙橀噺'
+                'message': 'ASR ????????? OPENAI_API_KEY ????'
             }), 503
 
     except Exception as e:

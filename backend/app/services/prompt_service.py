@@ -1,6 +1,4 @@
-﻿"""Prompt management service."""
-
-from pathlib import Path
+"""Prompt management service."""
 
 from app.db import database
 from app.models.prompt_config import DEFAULT_PROMPT_CONFIG, InterviewPromptConfig
@@ -10,20 +8,8 @@ class PromptService:
     """Prompt service backed by DB config."""
 
     def __init__(self, prompts_dir: str = None):
-        if prompts_dir is None:
-            prompts_dir = Path(__file__).parent.parent.parent / "prompts"
-        self.prompts_dir = Path(prompts_dir)
-        self._prompts = self._load_prompts()
-
-    def _load_prompts(self) -> dict:
-        prompt_file = self.prompts_dir / "system_prompts.yaml"
-        if not prompt_file.exists():
-            return {}
-
-        import yaml
-
-        with open(prompt_file, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+        # prompts_dir kept for backward compatibility; YAML prompts are deprecated.
+        _ = prompts_dir
 
     def _load_db_config(self) -> InterviewPromptConfig:
         config_data = database.get_prompt_config("default")
@@ -87,12 +73,9 @@ class PromptService:
         return "\n".join(lines)
 
     def get_interviewer_system_prompt(self, interview_config: dict, use_db_config: bool = True) -> str:
-        config = None
-        if use_db_config:
-            config = self._load_db_config()
-            base_prompt = config.base_system_prompt
-        else:
-            base_prompt = self._prompts.get("interviewer", {}).get("system", "")
+        _ = use_db_config  # reserved for backward compatibility
+        config = self._load_db_config()
+        base_prompt = config.base_system_prompt
 
         interview_id = interview_config.get("id")
         interview_profile = database.get_interview_profile(interview_id) if interview_id else None
@@ -150,7 +133,8 @@ class PromptService:
         return config.llm.model_dump()
 
     def get_evaluator_system_prompt(self) -> str:
-        return self._prompts.get("evaluator", {}).get("system", "")
+        config = self._load_db_config()
+        return config.evaluator_system_prompt or DEFAULT_PROMPT_CONFIG.evaluator_system_prompt
 
     def get_interview_welcome_message(self, interview_config: dict) -> str:
         return (
@@ -162,7 +146,9 @@ class PromptService:
         )
 
     def reload_prompts(self):
-        self._prompts = self._load_prompts()
+        # No-op after removing YAML-based prompts.
+        return None
 
 
 prompt_service = PromptService()
+

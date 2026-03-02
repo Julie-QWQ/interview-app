@@ -133,7 +133,13 @@
         </div>
       </template>
 
-      <el-table :data="recentInterviews" v-loading="loading" stripe>
+      <el-table
+        :data="recentInterviews"
+        v-loading="loading"
+        stripe
+        :header-cell-style="{ textAlign: 'center' }"
+        :cell-style="{ textAlign: 'center' }"
+      >
         <el-table-column prop="candidate_name" label="候选人" min-width="140" />
         <el-table-column prop="position" label="职位" min-width="180" />
         <el-table-column label="状态" width="110">
@@ -144,6 +150,11 @@
         <el-table-column prop="created_at" label="创建时间" min-width="170">
           <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button text bg @click="viewDetail(row.id)">进入面试</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-empty v-if="!loading && recentInterviews.length === 0" description="暂无面试记录" />
@@ -153,9 +164,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Plus, List, ChatDotRound, DocumentChecked, TrendCharts, Setting, VideoPlay, ArrowRight } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
 
+const router = useRouter()
 const interviewStore = useInterviewStore()
 
 const loading = ref(false)
@@ -228,6 +241,10 @@ function getStatusText(status) {
 function formatDate(dateStr) {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+function viewDetail(id) {
+  router.push(`/interviews/${id}`)
 }
 </script>
 
@@ -321,26 +338,33 @@ function formatDate(dateStr) {
 }
 
 .status-panel {
+  display: flex;
+  flex-direction: column;
+
+  :deep(.el-card__body) {
+    flex: 1;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
   .status-item {
     display: grid;
     grid-template-columns: 74px 1fr 42px;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
 
     span {
       color: var(--text-secondary);
-      font-size: 13px;
+      font-size: 14px;
     }
 
     strong {
       text-align: right;
       color: var(--text-primary);
-      font-size: 13px;
+      font-size: 14px;
+      font-weight: 600;
     }
   }
 }
