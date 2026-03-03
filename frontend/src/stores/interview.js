@@ -378,6 +378,18 @@ export const useInterviewStore = defineStore('interview', () => {
     loading.value = true
     try {
       const data = await interviewApi.complete(id)
+
+      // 乐观更新：先让界面立即切到 completed，再拉取后端最新详情兜底
+      if (currentInterview.value?.id === id) {
+        currentInterview.value = {
+          ...currentInterview.value,
+          status: 'completed'
+        }
+      }
+      interviews.value = interviews.value.map((item) =>
+        item.id === id ? { ...item, status: 'completed' } : item
+      )
+
       await fetchInterviewDetail(id)
       return data
     } finally {

@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, Response, stream_with_context
 import json
 import os
 import uuid
+from datetime import datetime
 from werkzeug.utils import secure_filename
 from app.services.ai_service import get_ai_service, init_ai_service
 from app.services.asr_service import get_asr_service, init_asr_service
@@ -57,6 +58,33 @@ def _normalize_skill_domain(domain_raw: str) -> str:
     domain = (domain_raw or "").strip().lower()
     allowed = {d.value for d in SkillDomain}
     return domain if domain in allowed else SkillDomain.FULLSTACK.value
+
+
+def _serialize_timestamp(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat(timespec='seconds')
+    return value
+
+
+def _build_history_export(interview_id: int, current_message_id: int) -> dict:
+    """Export only the current message path history."""
+    messages = database.get_message_path(interview_id, current_message_id)
+    exported_history = [
+        {
+            'id': msg.get('id'),
+            'role': msg.get('role'),
+            'content': msg.get('content'),
+            'timestamp': _serialize_timestamp(msg.get('timestamp'))
+        }
+        for msg in messages
+    ]
+    return {
+        'interview_id': interview_id,
+        'current_message_id': current_message_id,
+        'exported_at': datetime.now().isoformat(timespec='seconds'),
+        'message_count': len(exported_history),
+        'messages': exported_history
+    }
 
 
 # ==================== 闈㈣瘯鐩稿叧鎺ュ彛 ====================
@@ -283,18 +311,22 @@ def complete_interview(interview_id: int):
         if interview['status'] != InterviewStatus.IN_PROGRESS:
             return jsonify({'error': '面试状态不正确'}), 400
 
-        # 鑾峰彇瀵硅瘽鍘嗗彶
+        # 仅导出当前消息路径，不允许回退到全量消息
         current_message_id = interview.get('current_message_id')
-        if current_message_id:
-            messages = database.get_message_path(interview_id, current_message_id)
-        else:
-            messages = database.get_messages(interview_id)
+        if not current_message_id:
+            return jsonify({'error': '当前消息路径不存在，无法导出历史对话'}), 400
 
-        # 鑾峰彇AI鏈嶅姟骞剁敓鎴愯瘎浼?
-        ai_service = get_ai_service()
-        evaluation = ai_service.evaluate_interview(interview, messages)
+        export_payload = _build_history_export(interview_id, current_message_id)
 
-        # 淇濆瓨璇勪及
+        # 保存桩评估（本项目不负责真实评估）
+        evaluation = {
+            'overall_score': 0,
+            'dimension_scores': {},
+            'strengths': [],
+            'weaknesses': [],
+            'recommendation': '评估已打桩：仅导出当前消息路径历史对话',
+            'feedback': json.dumps(export_payload, ensure_ascii=False)
+        }
         database.create_evaluation({
             'interview_id': interview_id,
             'overall_score': evaluation['overall_score'],
@@ -308,14 +340,35 @@ def complete_interview(interview_id: int):
         # 鏇存柊鐘舵€佷负瀹屾垚
         database.update_interview_status(interview_id, InterviewStatus.COMPLETED)
 
-        logger.info(f"????: {interview_id}, ????: {evaluation['overall_score']}")
+        logger.info(f"面试完成（评估桩）: {interview_id}, 导出消息数: {export_payload['message_count']}")
         return jsonify({
-            'message': '????',
-            'evaluation': evaluation
+            'message': '面试已完成',
+            'evaluation': evaluation,
+            'history_export': export_payload
         }), 200
 
     except Exception as e:
         logger.error(f"瀹屾垚闈㈣瘯澶辫触: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/interviews/<int:interview_id>/history-export', methods=['GET'])
+def export_interview_history(interview_id: int):
+    """API endpoint."""
+    try:
+        interview = database.get_interview(interview_id)
+        if not interview:
+            return jsonify({'error': 'Interview not found'}), 404
+
+        current_message_id = interview.get('current_message_id')
+        if not current_message_id:
+            return jsonify({'error': '当前消息路径不存在，无法导出历史对话'}), 400
+
+        export_payload = _build_history_export(interview_id, current_message_id)
+        return jsonify(export_payload), 200
+
+    except Exception as e:
+        logger.error(f"导出历史对话失败: {e}")
         return jsonify({'error': str(e)}), 500
 
 

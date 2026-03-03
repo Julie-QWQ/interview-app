@@ -33,6 +33,10 @@ export const interviewApi = {
     return api.get(`/interviews/${id}/evaluation`)
   },
 
+  exportHistory(id) {
+    return api.get(`/interviews/${id}/history-export`)
+  },
+
   getStagesConfig() {
     return api.get('/stages/config')
   },

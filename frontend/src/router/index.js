@@ -17,6 +17,11 @@ const routes = [
     component: () => import('@/views/InterviewDetail.vue')
   },
   {
+    path: '/interviews/:id/report',
+    name: 'InterviewReport',
+    component: () => import('@/views/InterviewReport.vue')
+  },
+  {
     path: '/interview/create',
     name: 'CreateInterview',
     component: () => import('@/views/CreateInterview.vue')

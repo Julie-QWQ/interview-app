@@ -32,6 +32,14 @@
           <el-icon><Check /></el-icon>
           完成面试
         </el-button>
+        <el-button
+          v-if="currentInterview?.status === 'completed'"
+          type="primary"
+          @click="handleViewReport"
+          size="large"
+        >
+          查看面试报告
+        </el-button>
       </div>
     </div>
 
@@ -388,7 +396,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { VideoPlay, Check, Loading, RefreshLeft, Briefcase, User, Bell, MuteNotification, Microphone, ArrowLeft, ChatDotRound, Share, Document, List, TrendCharts, Avatar, Camera } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
 import { interviewApi } from '@/api/interview'
@@ -417,7 +425,7 @@ const asrServiceAvailable = ref(false)  // ASR 鏈嶅姟鏄惁鍙敤
 
 const loading = ref(false)
 const isStartingInterview = ref(false)
-const currentInterview = ref(null)
+const currentInterview = computed(() => interviewStore.currentInterview)
 const messages = computed(() => {
   // 鐩存帴杩斿洖 store 涓殑 messages锛屽畠宸茬粡鏄綋鍓嶈矾寰勭殑绾挎€ц〃绀?
   // 涓嶉渶瑕佸啀鐢?currentMessageIndex 鏉?slice
@@ -530,8 +538,7 @@ async function loadStagesConfig() {
 async function loadInterviewDetail() {
   loading.value = true
   try {
-    const data = await interviewStore.fetchInterviewDetail(interviewId.value)
-    currentInterview.value = data
+    await interviewStore.fetchInterviewDetail(interviewId.value)
     // messages 鐜板湪浠?computed 鑾峰彇,涓嶉渶瑕佹墜鍔ㄨ缃?
   } catch (error) {
     ElMessage.error('加载面试详情失败')
@@ -610,14 +617,21 @@ async function handleSend() {
 }
 
 async function handleComplete() {
+  let loadingService = null
   try {
-    await ElMessageBox.confirm('确认完成面试并生成评估报告？', '提示', {
+    await ElMessageBox.confirm('确认完成面试并导出当前历史对话？', '提示', {
       confirmButtonText: '完成',
       cancelButtonText: '取消',
       type: 'warning'
     })
 
     loading.value = true
+    loadingService = ElLoading.service({
+      lock: true,
+      text: '正在导出历史对话，请稍候...',
+      background: 'rgba(0, 0, 0, 0.2)',
+      customClass: 'complete-loading-mask'
+    })
 
     if (userCameraRef.value) {
       try {
@@ -628,8 +642,8 @@ async function handleComplete() {
       }
     }
 
-    const result = await interviewStore.completeInterview(interviewId.value)
-    ElMessage.success('面试已完成，评估报告已生成')
+    await interviewStore.completeInterview(interviewId.value)
+    ElMessage.success('面试已完成')
     await loadInterviewDetail()
     await loadEvaluation()
   } catch (error) {
@@ -637,8 +651,15 @@ async function handleComplete() {
       console.error('完成面试失败', error)
     }
   } finally {
+    if (loadingService) {
+      loadingService.close()
+    }
     loading.value = false
   }
+}
+
+function handleViewReport() {
+  router.push(`/interviews/${interviewId.value}/report`)
 }
 
 function scrollToBottom() {
@@ -1190,6 +1211,11 @@ body.interview-immersive-mode .app-container {
     transform: scale(1);
     opacity: 1;
   }
+}
+
+.complete-loading-mask {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 </style>
 
