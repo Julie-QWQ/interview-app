@@ -40,7 +40,7 @@ if not exist ".env" (
 )
 
 echo [INFO] Installing dependencies with uv...
-uv pip install -r requirements.txt
+uv sync --frozen
 
 echo [INFO] Starting backend service (port 8000)...
 start "AI Interview System - Backend" cmd /k "cd /d %CD% && .venv\Scripts\python.exe main.py"

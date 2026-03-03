@@ -40,7 +40,7 @@ if [ ! -f ".env" ]; then
 fi
 
 echo "[INFO] Installing dependencies with uv..."
-uv pip install -r requirements.txt
+uv sync --frozen
 
 echo "[INFO] Starting backend service (port 8000)..."
 python main.py &
