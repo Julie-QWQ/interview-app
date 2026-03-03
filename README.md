@@ -96,29 +96,17 @@ interview-service/
    cp backend/.env.example backend/.env
    ```
 
-2. 严格分层约定
-
-   - `.env` 仅填写敏感信息（密钥/密码）
-   - `config.yaml` 仅填写普通信息（地址、模型、端口、CORS、日志等）
-
-3. 编辑 `backend/.env`（仅敏感项）
+2. 编辑 `backend/.env`（敏感项）
 
    - `AI_API_KEY`：必填
    - `DB_PASSWORD`：必填
    - `ASR_API_KEY`：可选，不填时默认复用 `AI_API_KEY`
 
-4. 检查 `backend/config/config.yaml`（普通项）
-
-   - `database.host/name/user` 在此配置
-   - `ai.base_url/model` 在此配置
-   - `asr.base_url/model` 在此配置
-   - LLM 运行参数（如 `temperature`、`max_tokens`）由数据库 `prompt_configs.llm` 管理
+3. 编辑 `backend/config/config.yaml`（普通项）
 
 #### 前端配置
 
-当前版本前端无必填环境变量，默认可直接启动。
-
-若后续新增前端环境变量，请以 `frontend/.env.*` 文件为准。
+查看 `frontend/.env.development`，可修改后端端口
 
 ### 步骤二：启动
 
