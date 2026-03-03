@@ -17,6 +17,7 @@ class Settings:
         self.config_path = Path(config_path)
         self._config = self._load_config()
         self._apply_env_overrides()
+        self._validate_required_secrets()
 
     def _load_config(self) -> dict:
         """加载配置文件"""
@@ -48,30 +49,33 @@ class Settings:
             return config
 
     def _apply_env_overrides(self):
-        """应用环境变量覆盖"""
-        # AI配置从环境变量读取
+        """仅应用敏感环境变量覆盖"""
+        # AI 密钥（敏感）
         if ai_key := os.getenv("AI_API_KEY"):
             self._config['ai']['api_key'] = ai_key
-        if base_url := os.getenv("AI_BASE_URL"):
-            self._config['ai']['base_url'] = base_url
-        if ai_model := os.getenv("AI_MODEL"):
-            self._config['ai']['model'] = ai_model
 
-        # 数据库配置从环境变量读取
-        if db_host := os.getenv("DB_HOST"):
-            self._config['database']['host'] = db_host
-        if db_name := os.getenv("DB_NAME"):
-            self._config['database']['name'] = db_name
-        if db_user := os.getenv("DB_USER"):
-            self._config['database']['user'] = db_user
+        # 数据库密码（敏感）
         if db_password := os.getenv("DB_PASSWORD"):
             self._config['database']['password'] = db_password
 
-        # ASR 配置从环境变量读取
+        # ASR 密钥（敏感，可选）
         if asr_api_key := os.getenv("ASR_API_KEY"):
             self._config['asr']['api_key'] = asr_api_key
-        if asr_base_url := os.getenv("ASR_BASE_URL"):
-            self._config['asr']['base_url'] = asr_base_url
+
+    def _validate_required_secrets(self):
+        """启动时校验必填敏感配置，缺失则快速失败。"""
+        missing = []
+        if not (self._config.get('ai', {}).get('api_key') or '').strip():
+            missing.append("AI_API_KEY")
+        if not (self._config.get('database', {}).get('password') or '').strip():
+            missing.append("DB_PASSWORD")
+
+        if missing:
+            raise ValueError(
+                "Missing required secret environment variables: "
+                + ", ".join(missing)
+                + ". Please set them in backend/.env."
+            )
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值，支持点号分隔的路径"""

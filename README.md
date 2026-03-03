@@ -78,11 +78,53 @@ interview-service/
 - Docker & Docker Compose
 - AI API Key（OpenAI或兼容服务）
 
-### 方式一：一键启动（推荐）
+### 步骤一：配置
+
+#### 后端配置
+
+1. 复制环境变量模板
+
+   **Windows:**
+
+   ```cmd
+   copy backend\.env.example backend\.env
+   ```
+
+   **Linux/Mac:**
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+2. 严格分层约定
+
+   - `.env` 仅填写敏感信息（密钥/密码）
+   - `config.yaml` 仅填写普通信息（地址、模型、端口、CORS、日志等）
+
+3. 编辑 `backend/.env`（仅敏感项）
+
+   - `AI_API_KEY`：必填
+   - `DB_PASSWORD`：必填
+   - `ASR_API_KEY`：可选，不填时默认复用 `AI_API_KEY`
+
+4. 检查 `backend/config/config.yaml`（普通项）
+
+   - `database.host/name/user` 在此配置
+   - `ai.base_url/model` 在此配置
+   - `asr.base_url/model` 在此配置
+   - LLM 运行参数（如 `temperature`、`max_tokens`）由数据库 `prompt_configs.llm` 管理
+
+#### 前端配置
+
+当前版本前端无必填环境变量，默认可直接启动。
+
+若后续新增前端环境变量，请以 `frontend/.env.*` 文件为准。
+
+### 步骤二：启动
 
 **Windows:**
 ```cmd
-scripts\start-all.bat
+./scripts/start-all.bat
 ```
 
 **Linux/Mac:**
@@ -91,160 +133,10 @@ scripts\start-all.bat
 ```
 
 这会自动：
-1. 启动PostgreSQL数据库
+1. 通过容器启动PostgreSQL数据库
 2. 创建Python虚拟环境并安装依赖
-3. 启动后端服务（端口8000）
-4. 安装前端依赖并启动开发服务器（端口5173）
-
-### 方式二：分步启动
-
-#### 1. 启动数据库
-
-```bash
-# Windows
-scripts\start-db.bat
-
-# Linux/Mac
-./scripts/start-db.sh
-```
-
-或手动启动：
-```bash
-docker-compose up -d
-```
-
-#### 2. 启动后端
-
-```bash
-cd backend
-
-# 创建虚拟环境
-python -m venv venv
-
-# 激活虚拟环境
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
-
-# 安装依赖
-pip install -e .
-
-# 配置环境变量
-copy .env.example .env
-# 编辑 .env 文件，填入 AI_API_KEY 等配置
-
-# 启动服务
-python main.py
-```
-
-后端服务将在 http://localhost:8000 启动
-
-#### 3. 启动前端
-
-```bash
-cd frontend
-
-# 安装依赖
-npm install
-
-# 启动开发服务器
-npm run dev
-```
-
-前端应用将在 http://localhost:5173 启动
-
-## 配置说明
-
-### 环境变量 (backend/.env)
-
-```env
-# AI服务配置
-AI_API_KEY=your-api-key-here
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4o-mini
-
-# 数据库配置
-DB_HOST=localhost
-DB_NAME=interview_db
-DB_USER=postgres
-DB_PASSWORD=postgres
-```
-
-### AI模型配置
-
-系统支持任何兼容OpenAI API的服务。通过配置 `AI_MODEL` 环境变量即可切换模型：
-
-**常用模型推荐：**
-
-| 服务商 | 模型名称 | 说明 |
-|--------|---------|------|
-| OpenAI | `gpt-4o-mini` | 快速且性价比高 |
-| OpenAI | `gpt-4o` | 最新的GPT-4 Omni |
-| SiliconFlow | `Qwen/Qwen2.5-7B-Instruct` | 通义千问7B（免费/低成本） |
-| SiliconFlow | `Qwen/Qwen2.5-72B-Instruct` | 通义千问72B（更强） |
-| SiliconFlow | `deepseek-ai/DeepSeek-V3` | DeepSeek V3 |
-| SiliconFlow | `deepseek-ai/DeepSeek-R1` | DeepSeek推理模型 |
-
-**示例配置：**
-
-```env
-# 使用OpenAI
-AI_API_KEY=sk-xxx
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4o-mini
-
-# 使用SiliconFlow
-AI_API_KEY=sk-xxx
-AI_BASE_URL=https://api.siliconflow.cn/v1
-AI_MODEL=Qwen/Qwen2.5-72B-Instruct
-
-# 使用其他兼容服务
-AI_API_KEY=your-key
-AI_BASE_URL=https://your-api-endpoint.com/v1
-AI_MODEL=your-model-name
-```
-
-### 后端配置文件 (backend/config/config.yaml)
-
-配置文件包含默认设置，环境变量会覆盖这些值：
-
-```yaml
-app:
-  name: "interview-service"
-  port: 8000
-
-database:
-  host: "localhost"
-  port: 5432
-  name: "interview_db"
-  user: "postgres"
-  password: "postgres"
-
-ai:
-  provider: "openai"
-  api_key: "${AI_API_KEY}"
-  base_url: "${AI_BASE_URL:https://api.openai.com/v1}"
-  model: "Qwen/Qwen2.5-7B-Instruct"  # 可被AI_MODEL环境变量覆盖
-  temperature: 0.7
-  max_tokens: 2000
-```
-
-## API文档
-
-### 面试管理
-
-- `POST /api/interviews` - 创建面试
-- `GET /api/interviews` - 获取面试列表
-- `GET /api/interviews/:id` - 获取面试详情
-- `DELETE /api/interviews/:id` - 删除面试
-
-### 面试操作
-
-- `POST /api/interviews/:id/start` - 开始面试
-- `POST /api/interviews/:id/chat` - 发送消息
-- `POST /api/interviews/:id/complete` - 完成面试并生成评估
-- `GET /api/interviews/:id/evaluation` - 获取评估结果
+3. 启动后端服务
+4. 安装前端依赖并启动开发服务器
 
 ## 使用流程
 
@@ -267,49 +159,3 @@ ai:
    - 面试结束后点击"完成面试"
    - 系统自动生成多维度评估报告
    - 查看评分、优势和改进建议
-
-## Prompt定制
-
-系统支持通过修改 `backend/prompts/system_prompts.yaml` 来定制面试行为：
-
-- `interviewer.system`：面试官系统提示词
-- `evaluator.system`：评估系统提示词
-- `skill_domains`：不同技能领域的特定提示
-
-## 常用命令
-
-### 数据库管理
-
-```bash
-# 启动数据库
-scripts\start-db.bat
-
-# 停止数据库
-scripts\stop-db.bat
-
-# 查看日志
-docker-compose logs postgres
-
-# 重启数据库
-docker-compose restart
-```
-
-### 开发命令
-
-```bash
-# 后端开发
-cd backend
-python main.py
-
-# 前端开发
-cd frontend
-npm run dev
-
-# 构建前端生产版本
-cd frontend
-npm run build
-```
-
-## License
-
-MIT

@@ -12,23 +12,20 @@ database:
   port: 5432
   name: "interview_db"
   user: "postgres"
-  password: "postgres"
+  password: "${DB_PASSWORD}"
   pool_size: 5
   max_overflow: 10
 
 # AI服务配置 (可替换为任意兼容OpenAI API的服务)
 ai:
   api_key: "${AI_API_KEY}"
-  base_url: "${AI_BASE_URL:https://api.openai.com/v1}"  # 通过这个变量切换服务提供商
+  base_url: "https://api.siliconflow.cn/v1"  # 普通配置：通过 config.yaml 管理服务地址
   model: "Qwen/Qwen2.5-7B-Instruct"  # SiliconFlow支持的模型
-  temperature: 0.8  # 温度反应随机性，越低输出更确定
-  max_tokens: 3000  # 限制回复长度，加快响应速度
-  timeout: 30
 
 # ASR 语音识别配置 (使用 SiliconFlow ASR API)
 asr:
   api_key: "${ASR_API_KEY}"
-  base_url: "${ASR_BASE_URL:https://api.siliconflow.cn/v1}"
+  base_url: "https://api.siliconflow.cn/v1"
   model: "FunAudioLLM/SenseVoiceSmall"
   enabled: true
 
