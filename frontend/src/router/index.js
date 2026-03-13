@@ -18,8 +18,8 @@ const routes = [
   },
   {
     path: '/interviews/:id/report',
-    name: 'InterviewReport',
-    component: () => import('@/views/InterviewReport.vue')
+    name: 'InterviewExpressionReport',
+    component: () => import('@/views/InterviewExpressionReport.vue')
   },
   {
     path: '/interview/create',
@@ -29,12 +29,35 @@ const routes = [
   {
     path: '/admin/prompts',
     name: 'PromptConfig',
-    component: () => import('@/views/PromptConfig.vue')
+    component: () => import('@/views/prompts/PromptConfigLayout.vue'),
+    redirect: '/admin/prompts/interviewer',
+    children: [
+      {
+        path: 'interviewer',
+        name: 'InterviewerPromptConfig',
+        component: () => import('@/views/prompts/InterviewerPromptConfig.vue')
+      }
+    ]
+  },
+  {
+    path: '/admin/tools',
+    name: 'ToolConfig',
+    component: () => import('@/views/ToolConfig.vue')
+  },
+  {
+    path: '/admin/smart-reply',
+    name: 'SmartReplyConfig',
+    component: () => import('@/views/SmartReplyConfig.vue')
   },
   {
     path: '/admin/stages',
     name: 'StageConfig',
     component: () => import('@/views/StageConfig.vue')
+  },
+  {
+    path: '/admin/voice',
+    name: 'VoiceConfig',
+    component: () => import('@/views/VoiceConfig.vue')
   },
   {
     path: '/admin/profiles',
@@ -45,6 +68,16 @@ const routes = [
     path: '/test/camera',
     name: 'CameraTest',
     component: () => import('@/views/CameraTest.vue')
+  },
+  {
+    path: '/test/digital-human',
+    name: 'TestDigitalHuman',
+    component: () => import('@/views/TestDigitalHuman.vue')
+  },
+  {
+    path: '/test/xunfei-digital-human',
+    name: 'XunfeiDigitalHumanTest',
+    component: () => import('@/views/DigitalHumanTest.vue')
   }
 ]
 

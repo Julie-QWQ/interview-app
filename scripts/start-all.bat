@@ -42,8 +42,16 @@ if not exist ".env" (
 echo [INFO] Installing dependencies with uv...
 uv sync --frozen
 
-echo [INFO] Starting backend service (port 8000)...
-start "AI Interview System - Backend" cmd /k "cd /d %CD% && .venv\Scripts\python.exe main.py"
+echo [INFO] Bootstrapping database schema...
+.venv\Scripts\python.exe scripts\migration_manager.py migrate
+if errorlevel 1 (
+    echo [ERROR] Database bootstrap failed
+    cd ..
+    goto :error
+)
+
+echo [INFO] Starting backend service (port 8000 via uvicorn)...
+start "AI Interview System - Backend" cmd /k "cd /d %CD% && .venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 cd ..
 
 echo [SUCCESS] Backend service started

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div id="app">
     <el-container class="admin-shell">
       <el-aside v-if="!isMainInterviewView" class="sidebar">
@@ -32,7 +32,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, ChatLineRound, Collection, User, Camera } from '@element-plus/icons-vue'
+import { DataLine, ChatLineRound, Collection, User, Camera, Setting, Microphone, VideoCamera } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -40,9 +40,13 @@ const navItems = [
   { label: '仪表盘', path: '/', icon: DataLine },
   { label: '面试管理', path: '/interviews', icon: ChatLineRound },
   { label: 'Prompt 配置', path: '/admin/prompts', icon: Collection },
+  { label: '工具配置', path: '/admin/tools', icon: Setting },
+  { label: '智能回复配置', path: '/admin/smart-reply', icon: Setting },
   { label: '阶段配置', path: '/admin/stages', icon: DataLine },
+  { label: '语音配置', path: '/admin/voice', icon: Microphone },
   { label: '画像管理', path: '/admin/profiles', icon: User },
-  { label: '摄像头测试', path: '/test/camera', icon: Camera }
+  { label: '摄像头测试', path: '/test/camera', icon: Camera },
+  { label: '数字人测试', path: '/test/digital-human', icon: VideoCamera }
 ]
 
 const isMainInterviewView = computed(() => route.path.startsWith('/interviews/'))

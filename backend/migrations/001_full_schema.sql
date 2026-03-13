@@ -1,5 +1,6 @@
 -- Full database bootstrap schema for interview-service (PostgreSQL)
--- Safe to run on a fresh DB. Most statements are idempotent.
+-- This file must match the schema expected by the current runtime code.
+-- Safe to run on a fresh DB. Statements are idempotent where possible.
 
 BEGIN;
 
@@ -54,20 +55,7 @@ BEGIN
     END IF;
 END $$;
 
--- 4) Evaluation results
-CREATE TABLE IF NOT EXISTS evaluations (
-    id SERIAL PRIMARY KEY,
-    interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
-    overall_score INTEGER CHECK (overall_score >= 0 AND overall_score <= 100),
-    dimension_scores JSONB,
-    strengths TEXT[],
-    weaknesses TEXT[],
-    recommendation TEXT,
-    feedback TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 5) Prompt config
+-- 4) Prompt config
 CREATE TABLE IF NOT EXISTS prompt_configs (
     id SERIAL PRIMARY KEY,
     config_type VARCHAR(50) UNIQUE NOT NULL,
@@ -75,7 +63,7 @@ CREATE TABLE IF NOT EXISTS prompt_configs (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6) Interview snapshots
+-- 5) Interview snapshots
 CREATE TABLE IF NOT EXISTS interview_snapshots (
     id SERIAL PRIMARY KEY,
     interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
@@ -85,7 +73,7 @@ CREATE TABLE IF NOT EXISTS interview_snapshots (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7) Profile plugins
+-- 6) Profile plugins
 CREATE TABLE IF NOT EXISTS profile_plugins (
     id SERIAL PRIMARY KEY,
     plugin_id VARCHAR(50) UNIQUE NOT NULL,
@@ -98,7 +86,7 @@ CREATE TABLE IF NOT EXISTS profile_plugins (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8) Interview-profile binding
+-- 7) Interview-profile binding
 CREATE TABLE IF NOT EXISTS interview_profiles (
     id SERIAL PRIMARY KEY,
     interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
@@ -109,7 +97,69 @@ CREATE TABLE IF NOT EXISTS interview_profiles (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Keep exactly one profile binding row per interview (matches runtime assumption)
+-- 8) Tool invocation records
+CREATE TABLE IF NOT EXISTS tool_invocations (
+    id SERIAL PRIMARY KEY,
+    trace_id VARCHAR(100),
+    interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    stage VARCHAR(50) NOT NULL,
+    trigger VARCHAR(50) NOT NULL,
+    tool_name VARCHAR(100) NOT NULL,
+    request_payload JSONB,
+    response_payload JSONB,
+    status VARCHAR(30) NOT NULL,
+    latency_ms INTEGER DEFAULT 0,
+    cache_hit BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 9) Tool context cache
+CREATE TABLE IF NOT EXISTS interview_tool_contexts (
+    id SERIAL PRIMARY KEY,
+    interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    stage VARCHAR(50) NOT NULL,
+    tool_name VARCHAR(100) NOT NULL,
+    context_key VARCHAR(255) NOT NULL,
+    prompt_context TEXT,
+    structured_payload JSONB,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10) Expression analysis feature segments
+CREATE TABLE IF NOT EXISTS expression_feature_segments (
+    id SERIAL PRIMARY KEY,
+    interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    feature_type VARCHAR(20) NOT NULL,
+    segment_key VARCHAR(255) NOT NULL,
+    stage VARCHAR(50),
+    source VARCHAR(50),
+    started_at TIMESTAMP,
+    ended_at TIMESTAMP,
+    metrics JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11) Expression analysis reports
+CREATE TABLE IF NOT EXISTS expression_analysis_reports (
+    id SERIAL PRIMARY KEY,
+    interview_id INTEGER NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    overall_score INTEGER NOT NULL,
+    confidence_level VARCHAR(20) NOT NULL,
+    confidence_score INTEGER NOT NULL,
+    modality_coverage JSONB NOT NULL,
+    metrics JSONB NOT NULL,
+    dimension_scores JSONB NOT NULL,
+    evidence_summary JSONB NOT NULL,
+    risk_flags JSONB NOT NULL,
+    narrative_summary TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Keep exactly one profile binding row per interview
 CREATE UNIQUE INDEX IF NOT EXISTS uq_interview_profiles_interview_id
     ON interview_profiles(interview_id);
 
@@ -118,8 +168,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_interview_id ON messages(interview_id);
 CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
 CREATE INDEX IF NOT EXISTS idx_messages_branch_id ON messages(branch_id);
 CREATE INDEX IF NOT EXISTS idx_messages_is_active ON messages(is_active);
-
-CREATE INDEX IF NOT EXISTS idx_evaluations_interview_id ON evaluations(interview_id);
 
 CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status);
 CREATE INDEX IF NOT EXISTS idx_interviews_current_stage ON interviews(current_stage);
@@ -132,5 +180,19 @@ CREATE INDEX IF NOT EXISTS idx_profile_plugins_plugin_id ON profile_plugins(plug
 
 CREATE INDEX IF NOT EXISTS idx_interview_profiles_interview_id ON interview_profiles(interview_id);
 
-COMMIT;
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_interview_id ON tool_invocations(interview_id);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_trace_id ON tool_invocations(trace_id);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_stage_tool ON tool_invocations(stage, tool_name);
 
+CREATE INDEX IF NOT EXISTS idx_interview_tool_contexts_interview_id ON interview_tool_contexts(interview_id);
+CREATE INDEX IF NOT EXISTS idx_interview_tool_contexts_stage_tool ON interview_tool_contexts(stage, tool_name);
+
+CREATE INDEX IF NOT EXISTS idx_expression_feature_segments_interview_id
+    ON expression_feature_segments(interview_id);
+CREATE INDEX IF NOT EXISTS idx_expression_feature_segments_type
+    ON expression_feature_segments(interview_id, feature_type);
+
+CREATE INDEX IF NOT EXISTS idx_expression_analysis_reports_interview_id
+    ON expression_analysis_reports(interview_id);
+
+COMMIT;

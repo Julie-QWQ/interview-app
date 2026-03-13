@@ -1,220 +1,96 @@
-"""
-画像插件API接口
-"""
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List
-from pydantic import BaseModel
-import logging
+"""FastAPI routes for resume uploads."""
 
-from app.db.database import (
-    create_profile_plugin,
-    get_profile_plugin,
-    list_profile_plugins,
-    update_profile_plugin,
-    delete_profile_plugin,
-    apply_interview_profile,
-    get_interview_profile,
-    init_default_profiles
-)
+from __future__ import annotations
+
+import logging
+import os
+import uuid
+
+from fastapi import APIRouter, File, UploadFile
+from fastapi.responses import JSONResponse
+from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/profiles", tags=["画像管理"])
+router = APIRouter(prefix="/api")
+
+UPLOAD_FOLDER = "uploads/resumes"
+ALLOWED_EXTENSIONS = {"pdf"}
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-# ==================== 数据模型 ====================
-
-class ProfilePluginCreate(BaseModel):
-    plugin_id: str
-    type: str  # position | interviewer
-    name: str
-    description: Optional[str] = None
-    is_system: Optional[bool] = False
-    config: Optional[dict] = None
+def _error(message: str, status_code: int = 500) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": message})
 
 
-class ProfilePluginUpdate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    config: Optional[dict] = None
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-class InterviewProfileApply(BaseModel):
-    position_plugin_id: str
-    interviewer_plugin_id: str
-    custom_config: Optional[dict] = None
-
-
-# ==================== API接口 ====================
-
-@router.on_event("startup")
-async def startup_event():
-    """服务启动时初始化系统预设画像"""
+def extract_text_from_pdf(pdf_path: str) -> str | None:
     try:
-        init_default_profiles()
-    except Exception as e:
-        logger.warning(f"初始化预设画像失败: {e}")
+        import PyPDF2
+
+        text_content = []
+        with open(pdf_path, "rb") as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text and text.strip():
+                    text_content.append(text)
+        return "\n\n".join(text_content)
+    except ImportError:
+        try:
+            import pdfplumber
+
+            text_content = []
+            with pdfplumber.open(pdf_path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text and text.strip():
+                        text_content.append(text)
+            return "\n\n".join(text_content)
+        except ImportError:
+            logger.error("No PDF extraction library available")
+            return None
+    except Exception as exc:
+        logger.error("Failed to extract PDF text: %s", exc)
+        return None
 
 
-@router.get("/plugins")
-async def list_plugins(
-    type: Optional[str] = Query(None, description="插件类型: position/interviewer"),
-    is_system: Optional[bool] = Query(None, description="是否系统预设")
-):
-    """获取画像插件列表"""
+@router.post("/interviews/upload-resume")
+async def upload_resume(file: UploadFile | None = File(default=None)):
     try:
-        plugins = list_profile_plugins(plugin_type=type, is_system=is_system)
+        if file is None:
+            return _error("没有上传文件", status_code=400)
+        if not file.filename:
+            return _error("Filename is empty", status_code=400)
+        if not allowed_file(file.filename):
+            return _error("Only PDF files are supported", status_code=400)
+
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            return _error(f"文件大小不能超过 {MAX_FILE_SIZE // (1024 * 1024)}MB", status_code=400)
+
+        original_filename = secure_filename(file.filename)
+        file_id = str(uuid.uuid4())
+        file_extension = original_filename.rsplit(".", 1)[1].lower()
+        filename = f"{file_id}.{file_extension}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+        with open(filepath, "wb") as handle:
+            handle.write(content)
+
+        resume_text = extract_text_from_pdf(filepath)
         return {
-            "success": True,
-            "data": plugins
+            "message": "Resume uploaded successfully",
+            "file_id": file_id,
+            "original_filename": original_filename,
+            "file_path": filepath,
+            "resume_text": resume_text,
         }
-    except Exception as e:
-        logger.error(f"获取插件列表失败: {e}")
-        raise HTTPException(status_code=500, detail="获取插件列表失败")
-
-
-@router.post("/plugins")
-async def create_plugin(plugin: ProfilePluginCreate):
-    """创建自定义画像插件"""
-    try:
-        # 检查是否已存在
-        existing = get_profile_plugin(plugin.plugin_id)
-        if existing:
-            raise HTTPException(status_code=400, detail="插件ID已存在")
-
-        plugin_id = create_profile_plugin(plugin.dict())
-        return {
-            "success": True,
-            "message": "创建成功",
-            "data": {"plugin_id": plugin.plugin_id}
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"创建插件失败: {e}")
-        raise HTTPException(status_code=500, detail="创建插件失败")
-
-
-@router.get("/plugins/{plugin_id}")
-async def get_plugin(plugin_id: str):
-    """获取插件详情"""
-    try:
-        plugin = get_profile_plugin(plugin_id)
-        if not plugin:
-            raise HTTPException(status_code=404, detail="插件不存在")
-        return {
-            "success": True,
-            "data": plugin
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取插件详情失败: {e}")
-        raise HTTPException(status_code=500, detail="获取插件详情失败")
-
-
-@router.put("/plugins/{plugin_id}")
-async def update_plugin(plugin_id: str, plugin: ProfilePluginUpdate):
-    """更新插件配置"""
-    try:
-        # 检查插件是否存在
-        existing = get_profile_plugin(plugin_id)
-        if not existing:
-            raise HTTPException(status_code=404, detail="插件不存在")
-
-        # 系统预设插件不允许修改
-        if existing['is_system']:
-            raise HTTPException(status_code=403, detail="系统预设插件不允许修改")
-
-        success = update_profile_plugin(plugin_id, plugin.dict())
-        if not success:
-            raise HTTPException(status_code=500, detail="更新失败")
-
-        return {
-            "success": True,
-            "message": "更新成功"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"更新插件失败: {e}")
-        raise HTTPException(status_code=500, detail="更新插件失败")
-
-
-@router.delete("/plugins/{plugin_id}")
-async def delete_plugin(plugin_id: str):
-    """删除自定义插件"""
-    try:
-        # 检查插件是否存在
-        existing = get_profile_plugin(plugin_id)
-        if not existing:
-            raise HTTPException(status_code=404, detail="插件不存在")
-
-        # 系统预设插件不允许删除
-        if existing['is_system']:
-            raise HTTPException(status_code=403, detail="系统预设插件不允许删除")
-
-        success = delete_profile_plugin(plugin_id)
-        if not success:
-            raise HTTPException(status_code=500, detail="删除失败")
-
-        return {
-            "success": True,
-            "message": "删除成功"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"删除插件失败: {e}")
-        raise HTTPException(status_code=500, detail="删除插件失败")
-
-
-@router.post("/interviews/{interview_id}/apply")
-async def apply_profiles(interview_id: int, data: InterviewProfileApply):
-    """应用画像到面试"""
-    try:
-        # 检查插件是否存在
-        position_plugin = get_profile_plugin(data.position_plugin_id)
-        if not position_plugin:
-            raise HTTPException(status_code=404, detail=f"岗位插件 {data.position_plugin_id} 不存在")
-
-        interviewer_plugin = get_profile_plugin(data.interviewer_plugin_id)
-        if not interviewer_plugin:
-            raise HTTPException(status_code=404, detail=f"面试官插件 {data.interviewer_plugin_id} 不存在")
-
-        profile_id = apply_interview_profile(
-            interview_id,
-            data.position_plugin_id,
-            data.interviewer_plugin_id,
-            data.custom_config
-        )
-
-        return {
-            "success": True,
-            "message": "应用成功",
-            "data": {"profile_id": profile_id}
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"应用画像失败: {e}")
-        raise HTTPException(status_code=500, detail="应用画像失败")
-
-
-@router.get("/interviews/{interview_id}")
-async def get_interview_profiles(interview_id: int):
-    """获取面试的画像配置"""
-    try:
-        profile = get_interview_profile(interview_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail="该面试未配置画像")
-
-        return {
-            "success": True,
-            "data": profile
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"获取面试画像失败: {e}")
-        raise HTTPException(status_code=500, detail="获取面试画像失败")
+    except Exception as exc:
+        logger.error("Failed to upload resume: %s", exc)
+        return _error("Internal server error")

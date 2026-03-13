@@ -7,6 +7,11 @@ import App from './App.vue'
 import router from './router'
 import './styles/main.scss'
 
+// 加载讯飞数字人 SDK
+import AvatarPlatform from './assets/avatar-sdk/esm/index.js'
+window.AvatarPlatform = AvatarPlatform
+console.log('[Main] 讯飞数字人 SDK 已加载')
+
 const app = createApp(App)
 
 // 注册所有图标

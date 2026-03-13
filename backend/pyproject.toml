@@ -4,16 +4,22 @@ version = "0.1.0"
 description = "AI Interview System - Backend Service"
 requires-python = ">=3.10"
 dependencies = [
+    "fastapi>=0.116.0",
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
     "pydantic>=2.0.0",
     "psycopg2-binary>=2.9.0",
+    "python-multipart>=0.0.20",
     "requests>=2.31.0",
     "openai>=1.0.0",
+    "jinja2>=3.1.0",
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
     "PyPDF2>=3.0.0",
     "edge-tts>=6.1.0",
+    "uvicorn>=0.35.0",
+    "websockets>=15.0",
+    "types-requests>=2.32.4.20260107",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -22,3 +28,11 @@ packages = ["app"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=8.4.0",
+    "httpx>=0.28.0",
+    "types-psycopg2>=2.9.21.20260223",
+]

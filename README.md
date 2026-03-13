@@ -1,6 +1,6 @@
 # AI面试系统
 
-一个基于AI的智能技术面试系统，支持前端Vue3和后端Python Flask实现。
+一个基于AI的智能技术面试系统，支持前端Vue3和后端Python FastAPI 实现。
 
 ## 功能特性
 
@@ -22,7 +22,7 @@
 
 ### 后端
 - Python 3.10+
-- Flask
+- FastAPI
 - PostgreSQL
 - OpenAI API（兼容接口）
 
@@ -40,8 +40,9 @@ interview-service/
 │   ├── config/                # 配置文件
 │   │   ├── config.yaml        # 主配置
 │   │   └── settings.py        # 配置管理类
-│   ├── prompts/               # Prompt模板
-│   │   └── system_prompts.yaml
+│   ├── prompts/               # Jinja2 Prompt templates
+│   │   ├── interviewer_system_prompt.j2
+│   │   └── VARIABLES.md
 │   ├── logs/                  # 日志目录
 │   ├── main.py               # 入口文件
 │   ├── pyproject.toml        # Python依赖配置
@@ -68,6 +69,22 @@ interview-service/
 ├── .gitignore
 └── README.md
 ```
+
+## Prompt Templates
+
+- Canonical prompt structure now lives in `backend/prompts/interviewer_system_prompt.j2`.
+- Dynamic fields use Jinja2 placeholders such as `{{ base_system_prompt }}` and `{{ interview.position }}`.
+- Variable definitions are documented in `backend/prompts/VARIABLES.md`.
+- The backend now renders this template at runtime through a builder that fills the context incrementally.
+
+## 工具编排文档
+
+- 外部工具接入与后端编排说明：`backend/docs/tool-orchestration.md`
+- 文档内容包括：
+  - Python 虚拟环境使用方式
+  - 外部工具 HTTP 请求与响应协议
+  - 阶段触发规则
+  - 调试接口与日志说明
 
 ## 快速开始
 
@@ -126,6 +143,13 @@ interview-service/
 3. 启动后端服务
 4. 安装前端依赖并启动开发服务器
 
+后端开发入口现已切换为 ASGI：
+
+```bash
+cd backend
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
 ## 使用流程
 
 1. **创建面试**
@@ -147,3 +171,17 @@ interview-service/
    - 面试结束后点击"完成面试"
    - 系统自动生成多维度评估报告
    - 查看评分、优势和改进建议
+## Database Bootstrap
+
+- A fresh machine can now start from an empty PostgreSQL instance.
+- The backend will create the configured database automatically when it does not exist.
+- The baseline schema is applied from `backend/migrations/001_full_schema.sql`, then recorded in `schema_migrations`.
+- `scripts/start-all.bat` and `scripts/start-all.sh` run the bootstrap step before starting the backend service.
+
+Manual commands:
+
+```bash
+cd backend
+python scripts/migration_manager.py migrate
+python scripts/migration_manager.py status
+```

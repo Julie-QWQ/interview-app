@@ -1,52 +1,454 @@
-# 应用配置
 app:
-  name: "interview-service"
-  version: "0.1.0"
+  name: interview-service
+  version: 0.1.0
   debug: true
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 8000
-
-# 数据库配置
 database:
-  host: "localhost"
+  host: localhost
   port: 5432
-  name: "interview_db"
-  user: "postgres"
-  password: "${DB_PASSWORD}"
+  name: interview_db
+  user: postgres
+  password: ${DB_PASSWORD:}
   pool_size: 5
   max_overflow: 10
-
-# AI服务配置 (可替换为任意兼容OpenAI API的服务)
 ai:
-  api_key: "${AI_API_KEY}"
-  base_url: "https://api.siliconflow.cn/v1"  # 普通配置：通过 config.yaml 管理服务地址
-  model: "Qwen/Qwen2.5-7B-Instruct"  # SiliconFlow支持的模型
-
-# ASR 语音识别配置 (使用 SiliconFlow ASR API)
+  api_key: ${AI_API_KEY:}
+  base_url: https://api.siliconflow.cn/v1
+  model: Qwen/Qwen2.5-7B-Instruct
+digital_human:
+  provider: xunfei
+  xunfei:
+    app_id: ${XUNFEI_APP_ID:}
+    api_key: ${XUNFEI_API_KEY:}
+    api_secret: ${XUNFEI_API_SECRET:}
+    scene_id: ${XUNFEI_SCENE_ID:}
+    sample_rate: 16000
+    xrtc_url: wss://bra.xfyun.cn/rtc-api
 asr:
-  api_key: "${ASR_API_KEY}"
-  base_url: "https://api.siliconflow.cn/v1"
-  model: "FunAudioLLM/SenseVoiceSmall"
+  api_key: ${ASR_API_KEY:}
+  base_url: https://api.siliconflow.cn/v1
+  model: FunAudioLLM/SenseVoiceSmall
+  fallback_model: TeleAI/TeleSpeechASR
   enabled: true
-
-# CORS配置
+voice:
+  enabled: true
+  always_on_enabled: true
+  noise_floor_sample_ms: 800
+  speech_start_threshold: 1.6
+  min_speech_ms: 220
+  end_silence_ms: 1500
+  max_segment_ms: 15000
+  pre_roll_ms: 300
+  barge_in_ms: 250
+  chunk_retention_ms: 20000
+  min_threshold: 0.0015
+  timeslice_ms: 100
+  auto_send_min_chars: 8
+  typing_grace_ms: 1200
+  short_noise_words:
+  - 嗯
+  - 啊
+  - 哦
+  - 额
+  - 呃
+  - 唉
+  - 哈
+  - 噢
+  tts_voice: male
+expression_analysis:
+  enabled: true
+  video_sample_interval_ms: 1500
+  audio_min_segments: 1
+  video_min_windows: 2
+  minimum_confidence_samples: 3
+  weights:
+    fluency: 0.3
+    clarity: 0.25
+    confidence: 0.25
+    composure: 0.2
 cors:
   enabled: true
   origins:
-    - "http://localhost:5173"
-    - "http://localhost:3000"
+  - http://localhost:5173
+  - http://localhost:3000
   methods:
-    - GET
-    - POST
-    - PUT
-    - DELETE
-    - OPTIONS
+  - GET
+  - POST
+  - PUT
+  - DELETE
+  - OPTIONS
   credentials: true
-
-# 日志配置
 logging:
-  level: "INFO"
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  file: "logs/app.log"
-  max_bytes: 10485760  # 10MB
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file: logs/app.log
+  max_bytes: 10485760
   backup_count: 5
+profiles:
+  default_interviewer_display_image_url: https://openstorage.xfyousheng.com/asset/asset/20251119/5406e851-7422-44ad-9bc3-652a5a15b346.png
+  default_interviewer_avatar_id: '111204007'
+  default_interviewer_vcn: x4_lingyuyan_oral
+  interviewer_presets:
+  - plugin_id: interviewer_friendly
+    name: 平和引导型面试官
+    description: 低难度，语气平和，适合热身和基础能力考察
+    difficulty: basic
+    style_tone: gentle
+    avatar_id: '111204004'
+    vcn: x4_yezi
+    image_url: https://openstorage.xfyousheng.com/asset/asset/20251009/23ba9a25-75a3-4321-8fbe-89f8aa15e66c.png
+    display_image_url: https://openstorage.xfyousheng.com/asset/asset/20251009/23ba9a25-75a3-4321-8fbe-89f8aa15e66c.png
+    prompt: 你是一位平和引导型面试官。整体风格友好、克制、循序渐进，优先帮助候选人进入状态。问题先从基础理解和实际经验切入，追问保持温和，不刻意制造压力，但仍要确保回答具体且真实。
+  - plugin_id: interviewer_behavioral
+    name: 平衡追问型面试官
+    description: 中等难度，风格克制，在平和与压力之间保持平衡
+    difficulty: standard
+    style_tone: balanced
+    avatar_id: '111007012'
+    vcn: x4_lingxiaoyu_assist
+    image_url: https://openstorage.xfyousheng.com/asset/asset/20250512/1688eec8-24c3-47db-bbcf-99f50da3565b.png
+    display_image_url: https://openstorage.xfyousheng.com/asset/asset/20250512/1688eec8-24c3-47db-bbcf-99f50da3565b.png
+    prompt: 你是一位平衡追问型面试官。整体风格专业、稳定，不刻意宽松也不过度施压。重点考察候选人在真实项目中的判断、执行和复盘能力。你会要求候选人结合具体案例说明背景、行动、结果，并适度追问关键细节。
+  - plugin_id: interviewer_tech_expert
+    name: 严格挑战型面试官
+    description: 高难度，追问直接，强调技术深度和抗压表现
+    difficulty: challenging
+    style_tone: strict
+    avatar_id: '110592043'
+    vcn: x4_mingge
+    image_url: https://openstorage.xfyousheng.com/asset/asset/20251217/b0f31207-7f22-4126-bce2-2b9630eca152.png
+    display_image_url: https://openstorage.xfyousheng.com/asset/asset/20251217/b0f31207-7f22-4126-bce2-2b9630eca152.png
+    prompt: 你是一位严格挑战型面试官。整体风格偏严格，提问直接，容忍模糊回答的阈值很低。重点考察候选人的技术深度、方案取舍、边界条件、异常处理、性能瓶颈和抗压表达能力。回答一旦空泛，就立即要求量化、举例或给出证据。
+tools:
+  providers:
+    followup_engine:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    question_bank_retriever:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    resume_analyzer:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    smart_reply_engine:
+      description: 智能回复
+      mode: llm
+      enabled: true
+      url: ''
+      headers: {}
+  tool_prompts:
+    followup_engine:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 追问建议
+      result_prompt_template: '{{ raw_prompt_context }}'
+    question_bank_retriever:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 题库检索
+      result_prompt_template: '{{ raw_prompt_context }}'
+    resume_analyzer:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 简历分析
+      result_prompt_template: '{{ raw_prompt_context }}'
+    smart_reply_engine:
+      system_prompt: 'You are a smart interview action selector.
+
+        Choose exactly one next interviewer action.
+
+        Return JSON only with keys: action_key, action_label, rationale, utterance.
+
+        Requirements:
+
+        - action_key must be one of the allowed actions.
+
+        - utterance must be one natural interviewer sentence in Chinese.
+
+        - Keep rationale concise.
+
+        - Prefer the provided utterance templates, but you may rewrite naturally.
+
+        - Do not output markdown or code fences.'
+      user_prompt_template: 'stage: {{ stage }}
+
+        latest_user_message: {{ latest_user_message or ''(empty)'' }}
+
+        recent_messages:
+
+        {{ recent_messages_text }}
+
+
+        allowed_actions:
+
+        {{ allowed_actions_text }}
+
+
+        Choose the best next action for the interviewer.'
+      context_label: 智能回复建议
+      result_prompt_template: '- 建议行为: {{ structured_payload.action_label or structured_payload.action_key
+        }}
+
+        - 行为标识: {{ structured_payload.action_key }}
+
+        - 行为意图: {{ structured_payload.rationale or ''结合候选人最新回答决定下一步最合适的动作。'' }}
+
+        - 推荐语料: {{ structured_payload.utterance }}
+
+        - 使用约束: 你可以自然改写推荐语料，但必须遵循该行为意图，单轮只执行一个主动作。'
+  bindings:
+    closing:
+      trigger_map: {}
+      cache_only: true
+    scenario:
+      trigger_map:
+        stage_enter:
+        - question_bank_retriever
+        user_turn:
+        - question_bank_retriever
+        - followup_engine
+        - smart_reply_engine
+      cache_only: false
+    technical:
+      trigger_map:
+        stage_enter:
+        - question_bank_retriever
+        user_turn:
+        - question_bank_retriever
+        - followup_engine
+        - smart_reply_engine
+      cache_only: false
+    welcome:
+      trigger_map:
+        interview_start:
+        - resume_analyzer
+      cache_only: false
+  timeouts:
+    chat_seconds: 5.0
+    prefetch_seconds: 4.0
+  cache:
+    question_bank_top_k: 5
+    followup_top_k: 3
+    smart_reply_ttl_seconds: 60
+  smart_reply_catalog:
+    actions:
+    - action_key: ask_new_question
+      enabled: true
+      label: 提新问题
+      description: 当前回答已足够，可以切入下一个问题。
+      utterance_templates:
+      - 我们进入下一个问题。
+      - 这个点我了解了，接下来想换个角度问你。
+    - action_key: probe_detail
+      enabled: true
+      label: 追细节
+      description: 继续深挖技术细节、方案细节或实现细节。
+      utterance_templates:
+      - 你把这一部分的具体实现再展开讲讲。
+      - 这里的关键细节是什么？请具体说明。
+    - action_key: probe_contribution
+      enabled: true
+      label: 追个人贡献
+      description: 聚焦候选人在项目中的个人职责和实际产出。
+      utterance_templates:
+      - 这里你个人具体负责了哪一部分？
+      - 这个结果里，哪些是你亲自推动完成的？
+    - action_key: challenge
+      enabled: true
+      label: 质疑
+      description: 对模糊、可疑或前后不一致的表述进行挑战。
+      utterance_templates:
+      - 这个说法我想再核实一下，你的依据是什么？
+      - 如果按你这个方案执行，风险点会在哪里？
+    - action_key: clarify
+      enabled: true
+      label: 澄清
+      description: 候选人表达模糊、跳跃或缺少关键信息时先澄清。
+      utterance_templates:
+      - 我先确认一下，你刚才的意思是？
+      - 这里我理解得还不够清楚，你能换个方式再说一遍吗？
+    - action_key: refocus
+      enabled: true
+      label: 拉回主线
+      description: 用户跑题、回避或信息噪声过多时拉回目标问题。
+      utterance_templates:
+      - 我们先回到刚才那个核心问题。
+      - 先聚焦在你刚提到的这个关键点上。
+    - action_key: transition
+      enabled: true
+      label: 转场
+      description: 当前话题可以收束，准备切换到新的主题或阶段。
+      utterance_templates:
+      - 这个部分先到这里，我们切到下一个主题。
+      - 我想从另一个维度继续了解你。
+    - action_key: close
+      enabled: true
+      label: 收尾
+      description: 当前轮次或阶段适合做简短收束。
+      utterance_templates:
+      - 这个问题我了解得差不多了，我们做个小结。
+      - 好的，这部分先收一下。
+base_system_prompt: 你是一位专业的技术面试官，具有丰富的招聘经验。你的任务是进行技术面试，评估候选人的技术能力、问题解决能力和沟通能力。
+interviewer_style_prompt: '请严格遵守以下说话规则：
+
+
+  【角色定位】
+
+  - 你是一位真实面试官，正在进行正式模拟面试。
+
+  - 你说话应当自然、简洁、克制、口语化，像真实的人类面试官。
+
+  - 你需要根据候选人的回答动态追问，而不是机械地轮流提问。
+
+
+  【语言风格】
+
+  - 每次回复尽量简短，通常控制在 1~3 句。
+
+  - 优先使用短句、口语句、自然提问句，不要长篇大论。
+
+  - 允许少量自然口语过渡词，例如“好”“嗯”“行”“等一下”“我追问一下”“展开说说”。
+
+  - 不要每次都使用完整、正式、书面化的表达。
+
+  - 不要像主持人、老师或客服一样说话。
+
+
+  【禁止事项】
+
+  - 不要频繁说“感谢你的回答”“非常好”“非常不错”“很好，请继续”。
+
+  - 不要总是总结候选人刚才的话。
+
+  - 不要主动替候选人补全答案。
+
+  - 不要主动给出答题思路、标准答案或教学式提示。
+
+  - 不要把问题包装成很长的说明。
+
+  - 不要使用“接下来我将从……几个方面进行提问”这类强书面语。
+
+  - 不要频繁使用“请你详细介绍一下……”这类机械句式。
+
+  - 不要把自己说成 AI、助手、语言模型。
+
+
+  【对话行为】
+
+  - 如果候选人回答太泛，直接要求具体化。
+
+  - 如果候选人只讲团队成果，追问其个人贡献。
+
+  - 如果候选人声称效果很好，追问证据、指标或实验结果。
+
+  - 如果候选人跑题，直接拉回问题本身。
+
+  - 如果候选人回答较好，可以继续深挖边界条件、失败情况、替代方案。
+
+  - 每轮只推进一个主要问题点，不要一次问太多。
+
+
+  【真实面试官风格】
+
+  你更像这样说话：
+
+  - “你具体做了哪部分？”
+
+  - “展开说说这个细节。”
+
+  - “这个结论怎么证明？”
+
+  - “你说效果提升了，提升多少？”
+
+  - “先别讲团队整体，讲你自己做的。”
+
+  - “这个回答有点泛，拿例子说。”
+
+  - “我打断一下，回到刚才那个问题。”
+
+  - “如果线上延迟很高，你怎么处理？”
+
+
+  你不要像这样说话：
+
+  - “感谢你的精彩回答，接下来我想从系统设计、模型优化和工程部署三个维度进一步考察你的综合能力。”
+
+  - “你的回答比较全面，但仍然可以从更多角度展开说明。”
+
+  - “请你详细介绍一下你在该项目中承担的职责以及遇到的挑战。”
+
+
+  请始终保持：
+
+  自然、简洁、真实、克制、有追问感、有面试压力感，但不过度攻击。'
+tool_context_template: '{% for item in tool_context_items %}
+
+  ### {{ item.context_label }}
+
+  {{ item.prompt_context }}
+
+  {% if not loop.last %}
+
+
+  {% endif %}
+
+  {% endfor %}'
+stages:
+  closing:
+    stage: closing
+    name: 结束阶段
+    description: 总结表现并礼貌收尾
+    max_turns: 3
+    min_turns: 2
+    time_allocation: 2
+    system_instruction: 简要总结亮点，给出积极反馈并结束面试。
+    enabled: true
+    order: 4
+  scenario:
+    stage: scenario
+    name: 情景问题
+    description: 给出实际场景，评估分析与解决问题能力
+    max_turns: 5
+    min_turns: 2
+    time_allocation: 8
+    system_instruction: 用真实工作情景提问，重点看思路、权衡和决策。
+    enabled: true
+    order: 3
+  technical:
+    stage: technical
+    name: 技术问题
+    description: 围绕岗位核心技能进行深入考察
+    max_turns: 10
+    min_turns: 5
+    time_allocation: 18
+    system_instruction: 根据回答深度逐步追问，关注技术理解与工程实践。
+    enabled: true
+    order: 2
+  welcome:
+    stage: welcome
+    name: 开场介绍
+    description: 欢迎候选人、介绍流程并开启对话
+    max_turns: 2
+    min_turns: 1
+    time_allocation: 2
+    system_instruction: 友好开场，鼓励候选人简洁自我介绍并进入第一个问题。
+    enabled: true
+    order: 1
+llm:
+  temperature: 0.7
+  max_tokens: 2000
+  context_messages: 20
+  top_p: 1.0
+  frequency_penalty: 0.0
+  presence_penalty: 0.0
+  model_override: Qwen/Qwen2.5-7B-Instruct

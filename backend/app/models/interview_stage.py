@@ -73,7 +73,7 @@ class InterviewProgress:
     def get_first_stage(self) -> str:
         return self.stages[0].stage
 
-    def determine_stage(self, current_turn: int, elapsed_minutes: float = None) -> str:
+    def determine_stage(self, current_turn: int, elapsed_minutes: Optional[float] = None) -> str:
         """Determine stage by current turn."""
         _ = elapsed_minutes
         if current_turn <= 0:

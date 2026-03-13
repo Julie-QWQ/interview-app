@@ -42,8 +42,16 @@ fi
 echo "[INFO] Installing dependencies with uv..."
 uv sync --frozen
 
-echo "[INFO] Starting backend service (port 8000)..."
-python main.py &
+echo "[INFO] Bootstrapping database schema..."
+python scripts/migration_manager.py migrate
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Database bootstrap failed"
+    cd ..
+    exit 1
+fi
+
+echo "[INFO] Starting backend service (port 8000 via uvicorn)..."
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 cd ..
 

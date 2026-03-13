@@ -1,62 +1,56 @@
-"""
-Flask应用入口文件
-"""
-import sys
+"""ASGI entrypoint for the interview service."""
+
+from __future__ import annotations
+
 import logging
+import sys
 from pathlib import Path
+
+import uvicorn
 from dotenv import load_dotenv
 
-# 加载 .env 文件
 load_dotenv()
-
-# 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
 
 from app import create_app
-from app.api import init_api
 from config.settings import settings
 
 
-def setup_logging():
-    """配置日志"""
-    log_level = settings.get('logging.level', 'INFO')
-    log_format = settings.get('logging.format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+def setup_logging() -> None:
+    """Configure application logging."""
+    log_level = settings.get("logging.level", "INFO")
+    log_format = settings.get(
+        "logging.format",
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
+    Path("logs").mkdir(exist_ok=True)
     logging.basicConfig(
         level=getattr(logging, log_level),
         format=log_format,
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('logs/app.log', encoding='utf-8') if Path('logs').exists() else logging.StreamHandler()
-        ]
+            logging.FileHandler("logs/app.log", encoding="utf-8"),
+        ],
     )
 
 
-def main():
-    """主函数"""
-    # 创建日志目录
-    Path('logs').mkdir(exist_ok=True)
+setup_logging()
+app = create_app()
 
-    # 配置日志
-    setup_logging()
+
+def main() -> None:
+    """Run the development ASGI server."""
     logger = logging.getLogger(__name__)
-
-    # 创建应用
-    app = create_app()
-
-    # 初始化API
-    init_api(app.config['settings'])
-
-    logger.info(f"启动 {settings.app_name} v{settings.app_version}")
-    logger.info(f"监听地址: {settings.host}:{settings.port}")
-
-    # 运行应用
-    app.run(
+    logger.info("Starting %s v%s", settings.app_name, settings.app_version)
+    logger.info("Listening on %s:%s", settings.host, settings.port)
+    uvicorn.run(
+        "main:app",
         host=settings.host,
         port=settings.port,
-        debug=settings.debug
+        reload=settings.debug,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="create-interview">
     <el-page-header @back="$router.back()" title="返回">
       <template #content>

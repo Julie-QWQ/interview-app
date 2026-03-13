@@ -30,14 +30,18 @@
             :class="['plugin-card', { active: modelValue.interviewer?.plugin_id === plugin.plugin_id }]"
             @click="selectInterviewer(plugin)"
           >
+            <div v-if="plugin.config?.display_image_url" class="interviewer-visual">
+              <img :src="plugin.config.display_image_url" :alt="plugin.name" class="interviewer-image" />
+            </div>
             <div class="plugin-icon">
               <el-icon><User /></el-icon>
             </div>
             <h4>{{ plugin.name }}</h4>
             <p class="description">{{ plugin.description }}</p>
+            <p class="prompt-preview">{{ getPromptPreview(plugin.config?.prompt) }}</p>
             <div class="plugin-meta">
-              <el-tag size="small">{{ getStyleLabel(plugin.config?.style) }}</el-tag>
-              <el-tag size="small" type="success">{{ getCharacteristicsLabel(plugin) }}</el-tag>
+              <el-tag size="small">{{ getToneLabel(plugin.config?.style_tone) }}</el-tag>
+              <el-tag size="small" type="warning">{{ getDifficultyLabel(plugin.config?.difficulty) }}</el-tag>
             </div>
           </div>
         </div>
@@ -47,7 +51,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { Briefcase, User } from '@element-plus/icons-vue'
 import { profileApi } from '@/api/profile'
 
@@ -65,7 +69,6 @@ const loading = ref(false)
 const positionPlugins = ref([])
 const interviewerPlugins = ref([])
 
-// 加载插件列表
 async function loadPlugins() {
   loading.value = true
   try {
@@ -81,7 +84,7 @@ async function loadPlugins() {
       interviewerPlugins.value = interviewerRes.data
     }
   } catch (error) {
-    console.error('加载插件失败', error)
+    console.error('加载画像列表失败', error)
   } finally {
     loading.value = false
   }
@@ -101,27 +104,34 @@ function selectInterviewer(plugin) {
   })
 }
 
-function getStyleLabel(style) {
-  if (!style) return ''
-  const styleMap = {
-    'deep_technical': '技术深入型',
-    'guided': '亲和引导型',
-    'behavioral': '行为导向型'
-  }
-  return styleMap[style?.questioning_style] || style?.questioning_style || '标准'
+function getPromptPreview(prompt) {
+  const text = String(prompt || '').trim()
+  if (!text) return '未配置面试官风格'
+  return text.length > 48 ? `${text.slice(0, 48)}...` : text
 }
 
-function getCharacteristicsLabel(plugin) {
-  const characteristics = plugin.config?.characteristics || []
-  if (characteristics.length === 0) return '标准风格'
-  return characteristics[0]
+function getToneLabel(tone) {
+  const toneMap = {
+    gentle: '平和',
+    balanced: '平衡',
+    strict: '严格'
+  }
+  return toneMap[tone] || '平衡'
+}
+
+function getDifficultyLabel(difficulty) {
+  const difficultyMap = {
+    basic: '低难度',
+    standard: '中难度',
+    challenging: '高难度'
+  }
+  return difficultyMap[difficulty] || '中难度'
 }
 
 onMounted(() => {
   loadPlugins()
 })
 
-// 暴露刷新方法给父组件
 defineExpose({
   refresh: loadPlugins
 })
@@ -164,45 +174,69 @@ defineExpose({
         color: white;
       }
     }
+  }
 
-    .plugin-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: var(--radius-lg);
-      background: var(--bg-gray);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 12px;
-      color: var(--primary-color);
-      font-size: 20px;
-      transition: all 0.2s ease;
-    }
+  .plugin-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-gray);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    color: var(--primary-color);
+    font-size: 20px;
+    transition: all 0.2s ease;
+  }
 
-    h4 {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0 0 8px 0;
-      text-align: center;
-    }
+  .interviewer-visual {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    background: #f3f4f6;
+  }
 
-    .description {
-      font-size: 13px;
-      color: var(--text-secondary);
-      line-height: 1.5;
-      text-align: center;
-      min-height: 40px;
-      margin-bottom: 12px;
-    }
+  .interviewer-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
 
-    .plugin-meta {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      align-items: center;
-      flex-wrap: wrap;
-    }
+  h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+    text-align: center;
+  }
+
+  .description,
+  .prompt-preview {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+
+  .description {
+    min-height: 40px;
+  }
+
+  .prompt-preview {
+    min-height: 40px;
+  }
+
+  .plugin-meta {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
   }
 }
 </style>

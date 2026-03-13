@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="dashboard-page">
     <section class="dashboard-hero">
       <div>
@@ -111,6 +111,14 @@
           <span>
             <el-icon><Setting /></el-icon>
             Prompt 配置
+          </span>
+          <el-icon><ArrowRight /></el-icon>
+        </button>
+
+        <button class="quick-link" @click="$router.push('/admin/tools')">
+          <span>
+            <el-icon><Setting /></el-icon>
+            工具配置
           </span>
           <el-icon><ArrowRight /></el-icon>
         </button>

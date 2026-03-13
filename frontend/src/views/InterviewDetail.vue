@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="interview-detail-wrapper">
     <!-- 顶部导航栏 -->
     <div class="top-navbar">
@@ -32,14 +32,6 @@
           <el-icon><Check /></el-icon>
           完成面试
         </el-button>
-        <el-button
-          v-if="currentInterview?.status === 'completed'"
-          type="primary"
-          @click="handleViewReport"
-          size="large"
-        >
-          查看面试报告
-        </el-button>
       </div>
     </div>
 
@@ -49,7 +41,21 @@
       <div class="left-column">
         <!-- 面试官数字人 -->
         <div class="video-card digital-human-card">
-          <div class="video-placeholder">
+          <DigitalAvatar
+            v-if="currentInterview?.status === 'in_progress' || currentInterview?.status === 'completed'"
+            :key="digitalAvatarInstanceKey"
+            ref="digitalAvatarRef"
+            :session-id="interviewStore.sessionId"
+            :digital-human-config="interviewStore.digitalHumanConfig"
+            :provider="interviewStore.provider"
+            :is-speaking="Boolean(isPlaying && currentPlayingMessageId)"
+            :is-thinking="interviewStore.thinking"
+            :error-message="currentDigitalHumanError"
+            @ready="handleDigitalHumanReady"
+            @error="handleDigitalHumanError"
+            @status-change="handleDigitalHumanStatusChange"
+          />
+          <div v-else class="video-placeholder">
             <el-icon><Avatar /></el-icon>
             <span class="placeholder-label">面试官数字人</span>
             <span class="placeholder-hint">等待接入...</span>
@@ -61,13 +67,13 @@
 
         <!-- 用户摄像头 -->
         <div class="video-card user-camera-card">
-          <UserCamera
-            ref="userCameraRef"
-            :auto-start="false"
-            :is-recording="isListening"
-            @camera-started="handleCameraStarted"
-            @camera-stopped="handleCameraStopped"
-            @camera-error="handleCameraError"
+            <UserCamera
+              ref="userCameraRef"
+              :auto-start="false"
+              :is-recording="isListening || alwaysOnModeEnabled"
+              @camera-started="handleCameraStarted"
+              @camera-stopped="handleCameraStopped"
+              @camera-error="handleCameraError"
           />
         </div>
       </div>
@@ -178,7 +184,7 @@
               show-icon
             >
               {{ currentInterview?.status === 'completed'
-                ? '面试已结束，可查看评估结果与对话流程。'
+                ? '面试已结束，可导出当前历史对话。'
                 : '请先点击右上角的“开始面试”按钮开始面试。' }}
             </el-alert>
 
@@ -189,25 +195,39 @@
                 :rows="3"
                 placeholder="请输入您的回答..."
                 :disabled="interviewStore.thinking"
+                @input="handleInputChange"
                 @keydown.enter.ctrl="handleSend"
               />
 
-              <div v-if="isListening || isTranscribing" class="interim-text">
-                <el-icon class="is-loading"><Microphone /></el-icon>
-                <span>{{ isListening ? '正在录音...' : '正在识别...' }}</span>
+              <div v-if="showVoiceStatus" class="interim-text" :class="voiceStatusClass">
+                <el-icon :class="{ 'is-loading': isTranscribing || interviewStore.thinking }">
+                  <component :is="voiceStatusIcon" />
+                </el-icon>
+                <span>{{ voiceStatusText }}</span>
+              </div>
+
+              <div v-if="alwaysOnModeEnabled" class="voice-meter-panel" :class="{ active: voiceMeterActive }">
+                <div class="voice-meter-track">
+                  <div class="voice-meter-fill" :style="{ width: `${voiceMeterPercent}%` }"></div>
+                </div>
+                <div class="voice-meter-meta">
+                  <span>音量 {{ voiceRms.toFixed(4) }}</span>
+                  <span>阈值 {{ voiceThreshold.toFixed(4) }}</span>
+                  <span>底噪 {{ voiceNoiseFloor.toFixed(4) }}</span>
+                </div>
               </div>
 
               <div class="input-actions">
                 <div class="left-actions">
                   <el-button
                     :icon="Microphone"
-                    :type="isListening ? 'danger' : 'primary'"
+                    :type="alwaysOnModeEnabled ? 'danger' : 'primary'"
                     :loading="isTranscribing"
-                    :disabled="isTranscribing"
+                    :disabled="isTranscribing || !voiceConfig.enabled || (!isAlwaysOnCapable && !isSpeechSupported)"
                     @click="toggleSpeechRecognition"
-                    :class="{ 'listening': isListening }"
+                    :class="{ 'listening': alwaysOnModeEnabled || isListening }"
                   >
-                    {{ isListening ? '停止录音' : (isTranscribing ? '识别中...' : '点击说话') }}
+                    {{ voiceActionLabel }}
                   </el-button>
 
                   <span class="hint">
@@ -215,9 +235,15 @@
                       <el-icon class="is-loading"><Loading /></el-icon>
                       正在识别...
                     </template>
+                    <template v-else-if="alwaysOnModeEnabled && isPlaying">
+                      AI 回答中，可直接打断
+                    </template>
                     <template v-else-if="interviewStore.thinking">
                       <el-icon class="is-loading"><Loading /></el-icon>
                       AI 正在思考...
+                    </template>
+                    <template v-else-if="alwaysOnModeEnabled">
+                      常开语音已开启
                     </template>
                     <template v-else>
                       Ctrl + Enter 发送
@@ -357,7 +383,7 @@
             </div>
           </div>
 
-          <!-- 弹窗内容 -->
+          <!-- 内容区域 -->
           <div class="fullscreen-dialog-content">
             <div v-if="currentMessageIndex >= 0" class="rewind-notice-dialog">
               <el-alert
@@ -395,7 +421,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, ElLoading } from 'element-plus'
 import { VideoPlay, Check, Loading, RefreshLeft, Briefcase, User, Bell, MuteNotification, Microphone, ArrowLeft, ChatDotRound, Share, Document, List, TrendCharts, Avatar, Camera } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
@@ -403,81 +429,276 @@ import { interviewApi } from '@/api/interview'
 import { profileApi } from '@/api/profile'
 import ConversationGraph from '@/components/ConversationGraph.vue'
 import UserCamera from '@/components/UserCamera.vue'
-import { ASRRecorder, transcribeAudio, checkASRStatus } from '@/utils/asrRecorder'
-import '@/utils/cameraDiagnostics'  // 鍔犺浇璇婃柇宸ュ叿,鍙湪鎺у埗鍙颁娇鐢?cameraDiagnostics
+import DigitalAvatar from '@/components/DigitalAvatar.vue'
+import { ASRRecorder, transcribeAudio, checkASRStatus } from '@/utils/asrRecorder.ts'
+import {
+  buildAudioExpressionPayload,
+  createVideoExpressionReporter,
+  finalizeExpressionReport,
+  loadExpressionConfig,
+  reportAudioExpressionSegment
+} from '@/utils/expressionAnalysis'
+import { createVoiceSessionController } from '@/utils/voiceSessionController.ts'
+import '@/utils/cameraDiagnostics'  // 加载诊断工具，可在控制台使用 cameraDiagnostics
 
 const route = useRoute()
-const router = useRouter()
 const interviewStore = useInterviewStore()
 const IMMERSIVE_BODY_CLASS = 'interview-immersive-mode'
 
-// 璇煶鐩稿叧鐘舵€?
+// 语音相关状态
 const isMuted = computed(() => interviewStore.isMuted)
 const isPlaying = computed(() => interviewStore.isPlaying)
 const currentPlayingMessageId = computed(() => interviewStore.currentPlayingMessageId)
 
-// 璇煶璇嗗埆鐩稿叧鐘舵€?
+
+// 数字人相关状态
+const currentAIMessage = computed(() => {
+  const aiMessages = messages.value.filter(m => m.role === "assistant")
+  return aiMessages.length > 0 ? aiMessages[aiMessages.length - 1].content : ""
+})
+
+const currentDigitalHumanMessage = computed(() => {
+  const aiMessages = messages.value.filter(m => m.role === "assistant")
+  for (let i = aiMessages.length - 1; i >= 0; i -= 1) {
+    if (
+      (Array.isArray(aiMessages[i]?.avatarSegments) && aiMessages[i].avatarSegments.length > 0) ||
+      aiMessages[i]?.avatarError
+    ) {
+      return aiMessages[i]
+    }
+  }
+  return null
+})
+
+const currentDigitalHumanMessageKey = computed(() => currentDigitalHumanMessage.value?.id || '')
+const currentDigitalHumanSegments = computed(() => currentDigitalHumanMessage.value?.avatarSegments || [])
+const inlineDigitalHumanError = ref('')
+const currentDigitalHumanError = computed(() => currentDigitalHumanMessage.value?.avatarError || inlineDigitalHumanError.value || '')
+const DEFAULT_VOICE_CONFIG = {
+  enabled: true,
+  always_on_enabled: true,
+  noise_floor_sample_ms: 800,
+  speech_start_threshold: 1.6,
+  min_speech_ms: 220,
+  end_silence_ms: 750,
+  max_segment_ms: 15000,
+  pre_roll_ms: 300,
+  barge_in_ms: 250,
+  chunk_retention_ms: 20000,
+  min_threshold: 0.0015,
+  timeslice_ms: 100,
+  auto_send_min_chars: 8,
+  typing_grace_ms: 1200,
+  short_noise_words: ['嗯', '啊', '哦', '额', '呃', '唉', '哈', '噢']
+}
+
+// 语音识别相关状态
+function voiceDebug(label, payload) {
+  void label
+  void payload
+}
+
 const asrRecorder = ref(null)
+const voiceSession = ref(null)
+const expressionConfig = ref({
+  enabled: true,
+  video_sample_interval_ms: 1500
+})
+const expressionVideoReporter = ref(null)
+const manualRecordingStartedAt = ref('')
 const isListening = ref(false)
-const isTranscribing = ref(false)  // 姝ｅ湪涓婁紶鍜岃瘑鍒?
+const isTranscribing = ref(false)  // 正在上传和识别
 const isSpeechSupported = ref(false)
-const asrServiceAvailable = ref(false)  // ASR 鏈嶅姟鏄惁鍙敤
+const isAlwaysOnSupported = ref(false)
+const asrServiceAvailable = ref(false)  // ASR 服务是否可用
+const alwaysOnModeEnabled = ref(false)
+const voiceState = ref('idle')
+const voiceQueue = ref([])
+const voiceQueueBusy = ref(false)
+const lastManualInputAt = ref(0)
+const suppressInputTracking = ref(false)
+const voiceConfig = ref({ ...DEFAULT_VOICE_CONFIG })
+const voiceRms = ref(0)
+const voiceThreshold = ref(0)
+const voiceNoiseFloor = ref(0)
+const voiceDetected = ref(false)
 
 const loading = ref(false)
 const isStartingInterview = ref(false)
 const currentInterview = computed(() => interviewStore.currentInterview)
 const messages = computed(() => {
-  // 鐩存帴杩斿洖 store 涓殑 messages锛屽畠宸茬粡鏄綋鍓嶈矾寰勭殑绾挎€ц〃绀?
-  // 涓嶉渶瑕佸啀鐢?currentMessageIndex 鏉?slice
+  // 直接返回 store 中的 messages，它已经是当前路径的线性表示
+  // 不需要再用 currentMessageIndex 来 slice
   const storeMessages = interviewStore.messages
   return storeMessages
 })
 const allMessages = computed(() => {
   return interviewStore.messages
-}) // 鎵€鏈夋秷鎭巻鍙?
-const evaluation = ref(null)
+}) // 所有消息历史
 const inputMessage = ref('')
 const messagesContainer = ref(null)
 const stagesConfig = ref([])
 const conversationGraphRef = ref(null)
 const userCameraRef = ref(null)
-const activeCollapse = ref(['graph'])  // 榛樿灞曞紑鍥捐〃闈㈡澘
-const currentMessageIndex = ref(-1) // 褰撳墠瀵硅瘽浣嶇疆绱㈠紩锛?1琛ㄧず鏄剧ず鎵€鏈夋秷鎭紝>=0琛ㄧず鍥炴函鍒版煇鏉℃秷鎭級
-const interviewProfile = ref(null) // 鐢诲儚閰嶇疆
-const showGraphDialog = ref(false) // 鏄惁鏄剧ず娴佺▼鍥惧脊绐?
-// 娉ㄦ剰锛歝urrentMessageIndex 鍙兘閫氳繃浠ヤ笅涓ょ鏂瑰紡鏀瑰彉锛?
-// 1. 瀵硅瘽杩涜鏃讹紙鍙戦€佹秷鎭垨鎺ユ敹鍥炲锛? 鑷姩閲嶇疆涓?-1
-// 2. 鐢ㄦ埛鐐瑰嚮鍥炴函鎸夐挳 - 璁剧疆涓哄洖婧綅缃?
-// 鐐瑰嚮娴佺▼鍥捐妭鐐逛笉浼氭敼鍙樻鍊硷紝鍙細婊氬姩鍒板搴旀秷鎭?
+const activeCollapse = ref(['graph'])  // 默认展开图表面板
+const currentMessageIndex = ref(-1) // 当前对话位置索引，-1 表示显示所有消息，>=0 表示回溯到某条消息
+const interviewProfile = ref(null) // 画像配置
+const showGraphDialog = ref(false) // 是否显示流程图弹窗
+const digitalAvatarRef = ref(null)
+const routeReloading = ref(false)
+const digitalAvatarInstanceKey = computed(() => {
+  const interviewKey = String(interviewId.value || 'unknown')
+  const sessionKey = String(interviewStore.sessionId || 'pending')
+  const avatarKey = String(interviewStore.digitalHumanConfig?.avatarId || 'default')
+  return `${interviewKey}-${sessionKey}-${avatarKey}`
+})
+// 注意：currentMessageIndex 只能通过以下两种方式改变：
+// 1. 对话进行时（发送消息或接收回复）自动重置为 -1
+// 2. 用户点击回溯按钮，设置为回溯位置
+// 点击流程图节点不会改变此值，只会滚动到对应消息
 
 const interviewId = computed(() => parseInt(route.params.id))
-
-// 浠?store 鑾峰彇闃舵鍜岃繘搴︿俊鎭?
+// 从 store 获取阶段和进度信息
 const currentStage = computed(() => interviewStore.currentStage)
 const stageProgress = computed(() => interviewStore.stageProgress)
 
-// 璁＄畻鎬绘椂闀?
+// 计算总时长
 const totalDuration = computed(() => {
   return stagesConfig.value.reduce((sum, stage) => sum + stage.time_allocation, 0)
 })
 
+const showVoiceStatus = computed(() => {
+  return alwaysOnModeEnabled.value || isListening.value || isTranscribing.value || interviewStore.thinking
+})
+
+const isAlwaysOnCapable = computed(() => {
+  return isAlwaysOnSupported.value && voiceConfig.value.enabled !== false && voiceConfig.value.always_on_enabled !== false
+})
+
+const voiceStatusText = computed(() => {
+  if (isTranscribing.value) return '正在识别语音...'
+  if (alwaysOnModeEnabled.value && voiceState.value === 'barge_in') return '检测到插话，正在打断 AI'
+  if (alwaysOnModeEnabled.value && voiceState.value === 'speech_detected') return '检测到说话，正在收集语音'
+  if (alwaysOnModeEnabled.value && voiceState.value === 'segment_closing') return '等待停顿结束，准备识别'
+  if (alwaysOnModeEnabled.value && isPlaying.value) return 'AI 回答中，可直接打断'
+  if (alwaysOnModeEnabled.value) return '监听中，停顿后将自动发送'
+  if (isListening.value) return '正在录音...'
+  if (interviewStore.thinking) return 'AI 正在思考...'
+  return '语音已关闭'
+})
+
+const voiceStatusClass = computed(() => {
+  return {
+    listening: alwaysOnModeEnabled.value || isListening.value,
+    transcribing: isTranscribing.value,
+    playing: alwaysOnModeEnabled.value && isPlaying.value
+  }
+})
+
+const voiceMeterPercent = computed(() => {
+  if (!alwaysOnModeEnabled.value) return 0
+  const threshold = Math.max(voiceThreshold.value, 0.0001)
+  const ratio = voiceRms.value / threshold
+  return Math.max(0, Math.min(Math.round(ratio * 100), 100))
+})
+
+const voiceMeterActive = computed(() => {
+  return alwaysOnModeEnabled.value && (voiceDetected.value || voiceRms.value >= voiceThreshold.value)
+})
+
+const voiceStatusIcon = computed(() => {
+  if (isTranscribing.value || interviewStore.thinking) return Loading
+  if (alwaysOnModeEnabled.value && isPlaying.value) return VideoPlay
+  return Microphone
+})
+
+const voiceActionLabel = computed(() => {
+  if (!voiceConfig.value.enabled) {
+    return '语音已禁用'
+  }
+
+  if (isAlwaysOnCapable.value) {
+    if (alwaysOnModeEnabled.value) {
+      return isTranscribing.value ? '识别中...' : '关闭常开语音'
+    }
+    return '开启常开语音'
+  }
+
+  if (isListening.value) return '停止录音'
+  return isTranscribing.value ? '识别中...' : '点击说话'
+})
+
+async function reloadInterviewView(targetInterviewId = interviewId.value) {
+  if (!targetInterviewId || routeReloading.value) {
+    return
+  }
+
+  routeReloading.value = true
+  loading.value = true
+  inlineDigitalHumanError.value = ''
+  interviewProfile.value = null
+  currentMessageIndex.value = -1
+
+  try {
+    if (digitalAvatarRef.value) {
+      await digitalAvatarRef.value.destroy()
+    }
+    interviewStore.clearCurrentInterview()
+    await loadInterviewDetail(Number(targetInterviewId))
+    await loadInterviewProfile()
+    scrollToBottom()
+  } catch (error) {
+    console.error('切换面试详情失败', error)
+    ElMessage.error('切换面试详情失败')
+  } finally {
+    loading.value = false
+    routeReloading.value = false
+  }
+}
+
 onMounted(async () => {
   document.body.classList.add(IMMERSIVE_BODY_CLASS)
   await loadStagesConfig()
-  await loadInterviewDetail()
-  await loadEvaluation()
-  await loadInterviewProfile()
+  await reloadInterviewView(interviewId.value)
+  await loadExpressionRuntimeConfig()
   scrollToBottom()
 
-  // 鍒濆鍖栬闊宠瘑鍒?
+  // 初始化语音识别
   initSpeechRecognition()
 })
 
-onUnmounted(() => {
-  document.body.classList.remove(IMMERSIVE_BODY_CLASS)
+watch(
+  () => route.params.id,
+  async (newId, oldId) => {
+    if (!newId || newId === oldId) {
+      return
+    }
+    await reloadInterviewView(Number(newId))
+  }
+)
+
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.name !== 'InterviewDetail' || to.params.id === from.params.id) {
+    return
+  }
+  await reloadInterviewView(Number(to.params.id))
 })
 
-// 鍔犺浇闈㈣瘯鐢诲儚閰嶇疆
+onUnmounted(async () => {
+  document.body.classList.remove(IMMERSIVE_BODY_CLASS)
+  expressionVideoReporter.value?.stop?.()
+  if (alwaysOnModeEnabled.value) {
+    await stopAlwaysOnVoice()
+  }
+  if (asrRecorder.value?.isRecording) {
+    asrRecorder.value.cancelRecording()
+  }
+  if (digitalAvatarRef.value) {
+    await digitalAvatarRef.value.destroy()
+  }
+})
+
+// 加载面试画像配置
 async function loadInterviewProfile() {
   try {
     const res = await profileApi.getInterviewProfile(interviewId.value)
@@ -485,12 +706,12 @@ async function loadInterviewProfile() {
       interviewProfile.value = res.data
     }
   } catch (error) {
-    // 濡傛灉闈㈣瘯娌℃湁閰嶇疆鐢诲儚锛屼笉鏄剧ず閿欒
-    // 璇ラ潰璇曟湭閰嶇疆鐢诲儚
+    // 如果面试没有配置画像，不显示错误
+    // 该面试未配置画像
   }
 }
 
-// 鑾峰彇鐢诲儚鍚嶇О
+// 获取画像名称
 function getProfileName(profile, type) {
   if (type === 'position' && profile.position_config) {
     return profile.position_config.name || '未知岗位画像'
@@ -501,30 +722,43 @@ function getProfileName(profile, type) {
   return '未知画像'
 }
 
-// 鑾峰彇闈㈣瘯瀹橀鏍兼爣绛?
+// 获取面试官风格标签
 function getInterviewerStyleLabel(style) {
   if (!style) return ''
   const styleMap = {
-    'deep_technical': '技术深入型',
-    'guided': '亲和引导型',
-    'behavioral': '行为导向型'
+    analytical: '分析型',
+    guided: '引导型',
+    behavioral: '行为型'
+  }
+  const difficultyMap = {
+    basic: '基础',
+    standard: '标准',
+    challenging: '提升'
   }
   const questioningStyle = styleMap[style?.questioning_style] || style?.questioning_style || '标准'
-  const paceMap = {
-    'fast': '快节奏',
-    'moderate': '适中',
-    'slow': '慢节奏'
-  }
-  const pace = paceMap[style?.pace] || ''
-  return pace ? `${questioningStyle} · ${pace}` : questioningStyle
+  const difficulty = difficultyMap[style?.difficulty] || style?.difficulty || ''
+  return difficulty ? `${questioningStyle} · ${difficulty}` : questioningStyle
 }
 
-// 鐩戝惉娑堟伅鍙樺寲锛岃嚜鍔ㄦ粴鍔ㄥ埌搴曢儴锛堟敮鎸佹祦寮忚緭鍑猴級
+// 监听消息变化，自动滚动到底部（支持流式输出）
 watch(messages, () => {
   nextTick(() => {
     scrollToBottom()
   })
 }, { deep: true })
+
+watch(() => interviewStore.thinking, (thinking) => {
+  if (!thinking && voiceQueue.value.length > 0) {
+    processVoiceQueue()
+  }
+})
+
+watch(isPlaying, (playing) => {
+  if (!alwaysOnModeEnabled.value || isTranscribing.value) {
+    return
+  }
+  voiceState.value = playing ? 'assistant_playing' : 'armed'
+})
 
 async function loadStagesConfig() {
   try {
@@ -535,11 +769,12 @@ async function loadStagesConfig() {
   }
 }
 
-async function loadInterviewDetail() {
+async function loadInterviewDetail(targetInterviewId = interviewId.value) {
   loading.value = true
   try {
-    await interviewStore.fetchInterviewDetail(interviewId.value)
-    // messages 鐜板湪浠?computed 鑾峰彇,涓嶉渶瑕佹墜鍔ㄨ缃?
+    await interviewStore.fetchInterviewDetail(targetInterviewId)
+    await ensureDigitalHumanSession(targetInterviewId)
+    // messages 现在从 computed 获取，不需要手动设置
   } catch (error) {
     ElMessage.error('加载面试详情失败')
     console.error(error)
@@ -548,14 +783,95 @@ async function loadInterviewDetail() {
   }
 }
 
-async function loadEvaluation() {
+async function ensureDigitalHumanSession(targetInterviewId = interviewId.value) {
+  const status = currentInterview.value?.status
+  if (!['in_progress', 'completed'].includes(status)) {
+    return
+  }
+  if (interviewStore.sessionId || interviewStore.provider === 'disabled') {
+    return
+  }
   try {
-    evaluation.value = await interviewApi.getEvaluation(interviewId.value)
+    await interviewStore.initAvatarSession(targetInterviewId)
   } catch (error) {
-    // 璇勪及鍙兘涓嶅瓨鍦紝蹇界暐閿欒
-    evaluation.value = null
+    console.warn('初始化数字人会话失败:', error)
   }
 }
+
+function handleDigitalHumanReady() {
+  inlineDigitalHumanError.value = ''
+  interviewStore.setDigitalHumanReady(true)
+}
+
+function handleDigitalHumanError(error) {
+  const message = error?.message || String(error || '')
+  inlineDigitalHumanError.value = formatDigitalHumanError(message)
+  interviewStore.setDigitalHumanError(message)
+}
+
+function handleDigitalHumanStatusChange(status) {
+  interviewStore.setAvatarStatus(status)
+}
+
+function delay(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+async function waitForDigitalHumanReady(timeoutMs = 10000) {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await nextTick()
+    if (
+      digitalAvatarRef.value &&
+      interviewStore.provider === 'xunfei' &&
+      interviewStore.digitalHumanConfig &&
+      interviewStore.digitalHumanReady
+    ) {
+      return true
+    }
+    await delay(100)
+  }
+
+  return false
+}
+
+function getLatestAssistantMessageId() {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const message = messages.value[index]
+    if (message?.role === 'assistant' && !message?.isStreaming) {
+      return message.id
+    }
+  }
+  return null
+}
+
+async function speakAssistantText(text, messageId = null) {
+  const normalizedText = String(text || '').trim()
+  if (!normalizedText || isMuted.value) {
+    return false
+  }
+
+  const ready = await waitForDigitalHumanReady()
+  if (!ready) {
+    console.warn('数字人未就绪，跳过本次播报')
+    return false
+  }
+
+  const targetMessageId = messageId ?? getLatestAssistantMessageId()
+  interviewStore.beginAssistantSpeech(targetMessageId)
+
+  try {
+    await digitalAvatarRef.value.speakText(normalizedText)
+    return true
+  } catch (error) {
+    console.error('数字人播报失败:', error)
+    interviewStore.finishAssistantSpeech()
+    interviewStore.setDigitalHumanError(error?.message || String(error || ''))
+    throw error
+  }
+}
+
 
 async function handleStart() {
   try {
@@ -566,9 +882,25 @@ async function handleStart() {
     })
 
     isStartingInterview.value = true
-    await interviewStore.startInterview(interviewId.value)
+    inlineDigitalHumanError.value = ''
+
+    if (digitalAvatarRef.value?.unlockAudio) {
+      await digitalAvatarRef.value.unlockAudio()
+    }
+
+    try {
+      await interviewStore.initAvatarSession(interviewId.value)
+    } catch (error) {
+      console.warn('初始化 Avatar Dialog 失败，将使用 D-ID 备用方案:', error)
+    }
+
+    const result = await interviewStore.startInterview(interviewId.value)
+
+    if (result?.welcome_message) {
+      await speakAssistantText(result.welcome_message, result.message_id)
+    }
+
     ElMessage.success('面试已开始')
-    await loadInterviewDetail()
     scrollToBottom()
 
     if (userCameraRef.value) {
@@ -581,7 +913,11 @@ async function handleStart() {
   } catch (error) {
     if (error !== 'cancel') {
       console.error('开始面试失败', error)
-      ElMessage.error('开始面试失败，请重试')
+      if (isDigitalHumanRelatedError(error)) {
+        inlineDigitalHumanError.value = formatDigitalHumanError(error)
+      } else {
+        ElMessage.error('开始面试失败，请重试')
+      }
     }
   } finally {
     isStartingInterview.value = false
@@ -595,25 +931,220 @@ async function handleSend() {
     return
   }
 
+  try {
+    voiceDebug('handleSend: manual send requested', {
+      length: content.length,
+      queueLength: voiceQueue.value.length
+    })
+    voiceQueue.value = []
+    inputMessage.value = ''
+    inlineDigitalHumanError.value = ''
+    await sendInterviewContent(content, 'text_input')
+  } catch (error) {
+    console.error('发送消息失败', error)
+    if (isDigitalHumanRelatedError(error)) {
+      inlineDigitalHumanError.value = formatDigitalHumanError(error)
+    } else {
+      ElMessage.error('发送失败，请重试')
+    }
+  }
+}
+
+async function sendInterviewContent(content, source = 'text_input') {
+  voiceDebug('sendInterviewContent: sending message', {
+    source,
+    length: content?.length,
+    preview: String(content || '').slice(0, 80)
+  })
   if (interviewStore.thinking) {
+    throw new Error('AI 正在思考，请稍候')
+  }
+
+  if (currentMessageIndex.value >= 0 && currentMessageIndex.value < messages.value.length - 1) {
+    const targetMessage = messages.value[currentMessageIndex.value]
+    interviewStore.createNewBranch(targetMessage.id)
+    currentMessageIndex.value = -1
+    ElMessage.info('已创建新的对话分支')
+  }
+
+  const result = await interviewStore.sendMessage(interviewId.value, content, { source })
+  const replyText = result?.reply || messages.value[messages.value.length - 1]?.content || ''
+  const replyMessageId = result?.message_id ?? getLatestAssistantMessageId()
+  await speakAssistantText(replyText, replyMessageId)
+  return result
+}
+
+function handleInputChange() {
+  if (!suppressInputTracking.value) {
+    lastManualInputAt.value = Date.now()
+  }
+}
+
+function setInputMessageSilently(value) {
+  suppressInputTracking.value = true
+  inputMessage.value = value
+  nextTick(() => {
+    suppressInputTracking.value = false
+  })
+}
+
+function normalizeRecognizedText(text = '') {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function hasIncompleteTail(text = '') {
+  return /[，,、：:（(]$/.test(text) || /(然后|就是|那个|这个|所以|因为)$/.test(text)
+}
+
+function shouldDiscardRecognizedText(text = '') {
+  if (!text) return true
+  if (text.length < 2) return true
+  return new Set(voiceConfig.value.short_noise_words || []).has(text)
+}
+
+function shouldDeferAutoSend(text = '') {
+  return text.length < Number(voiceConfig.value.auto_send_min_chars || DEFAULT_VOICE_CONFIG.auto_send_min_chars) && hasIncompleteTail(text)
+}
+
+function buildVoiceSessionOptions() {
+  return {
+    noiseFloorSampleMs: Number(voiceConfig.value.noise_floor_sample_ms),
+    speechStartThreshold: Number(voiceConfig.value.speech_start_threshold),
+    minSpeechMs: Number(voiceConfig.value.min_speech_ms),
+    endSilenceMs: Number(voiceConfig.value.end_silence_ms),
+    maxSegmentMs: Number(voiceConfig.value.max_segment_ms),
+    preRollMs: Number(voiceConfig.value.pre_roll_ms),
+    bargeInMs: Number(voiceConfig.value.barge_in_ms),
+    chunkRetentionMs: Number(voiceConfig.value.chunk_retention_ms),
+    minThreshold: Number(voiceConfig.value.min_threshold),
+    timesliceMs: Number(voiceConfig.value.timeslice_ms)
+  }
+}
+
+async function enqueueVoiceSegment(segment) {
+  voiceQueue.value.push(segment)
+  voiceDebug('enqueueVoiceSegment: queued', {
+    queueLength: voiceQueue.value.length,
+    stats: segment.stats,
+    blobSize: segment.blob?.size,
+    blobType: segment.blob?.type
+  })
+  await processVoiceQueue()
+}
+
+async function processVoiceQueue() {
+  if (voiceQueueBusy.value || isTranscribing.value || interviewStore.thinking) {
+    voiceDebug('processVoiceQueue: skipped', {
+      voiceQueueBusy: voiceQueueBusy.value,
+      isTranscribing: isTranscribing.value,
+      thinking: interviewStore.thinking,
+      queueLength: voiceQueue.value.length
+    })
     return
   }
 
-  try {
-    inputMessage.value = ''
+  const nextSegment = voiceQueue.value.shift()
+  if (!nextSegment) {
+    voiceDebug('processVoiceQueue: no pending segment')
+    return
+  }
 
-    if (currentMessageIndex.value >= 0 && currentMessageIndex.value < messages.value.length - 1) {
-      const targetMessage = messages.value[currentMessageIndex.value]
-      interviewStore.createNewBranch(targetMessage.id)
-      currentMessageIndex.value = -1
-      ElMessage.info('已创建新的对话分支')
+  voiceQueueBusy.value = true
+  isTranscribing.value = true
+  voiceState.value = 'transcribing'
+
+  try {
+    voiceDebug('processVoiceQueue: transcribing segment', nextSegment.stats)
+    const result = await transcribeAudio(nextSegment.blob, {
+      segment_id: nextSegment.stats.segmentId,
+      client_started_at: nextSegment.stats.startedAt,
+      client_ended_at: nextSegment.stats.endedAt,
+      source: 'always_on_voice'
+    })
+
+    const text = normalizeRecognizedText(result?.text)
+    voiceDebug('processVoiceQueue: transcription result', {
+      result,
+      normalizedText: text
+    })
+    await reportExpressionAudioFromResult({
+      segmentId: nextSegment.stats.segmentId,
+      source: 'always_on_voice',
+      startedAt: nextSegment.stats.startedAt,
+      endedAt: nextSegment.stats.endedAt,
+      text,
+      segmentStats: nextSegment.stats
+    })
+    if (shouldDiscardRecognizedText(text)) {
+      voiceDebug('processVoiceQueue: discarded recognized text', {
+        text,
+        reason: !text ? 'empty' : text.length < 2 ? 'too_short' : 'noise_word'
+      })
+      return
     }
 
-    await interviewStore.sendMessage(interviewId.value, content)
+    const userHasDraft = Boolean(inputMessage.value.trim())
+    const userIsTyping = Date.now() - lastManualInputAt.value < Number(voiceConfig.value.typing_grace_ms || DEFAULT_VOICE_CONFIG.typing_grace_ms)
+    const shouldAutoSend = Boolean(result?.should_auto_send) && !shouldDeferAutoSend(text)
+    voiceDebug('processVoiceQueue: send decision', {
+      userHasDraft,
+      userIsTyping,
+      shouldAutoSend,
+      shouldDefer: shouldDeferAutoSend(text),
+      textLength: text.length
+    })
+
+    if (shouldAutoSend && !userHasDraft && !userIsTyping) {
+      await sendInterviewContent(text, 'always_on_voice')
+      return
+    }
+
+    if (userHasDraft || userIsTyping) {
+      ElMessage.info('检测到已有输入，语音识别结果未自动覆盖')
+      return
+    }
+
+    setInputMessageSilently(text)
+    voiceDebug('processVoiceQueue: filled input without auto-send', { text })
+    ElMessage.info('语音已识别，可确认后发送')
   } catch (error) {
-    console.error('发送消息失败', error)
-    ElMessage.error('发送失败，请重试')
+    console.error('语音识别失败:', error)
+    ElMessage.error(`语音识别失败: ${error.message}`)
+  } finally {
+    isTranscribing.value = false
+    voiceQueueBusy.value = false
+    if (alwaysOnModeEnabled.value) {
+      voiceState.value = isPlaying.value ? 'assistant_playing' : 'armed'
+    }
+    if (voiceQueue.value.length > 0 && !interviewStore.thinking) {
+      processVoiceQueue()
+    }
   }
+}
+
+function isDigitalHumanRelatedError(error) {
+  const text = String(error || '').toLowerCase()
+  return text.includes('d-id') ||
+    text.includes('digital human') ||
+    text.includes('avatar') ||
+    text.includes('credits') ||
+    text.includes('unauthorized')
+}
+
+function formatDigitalHumanError(error) {
+  const text = String(error || '').toLowerCase()
+  if (text.includes('credits') || text.includes('402')) {
+    return '数字人额度不足，已切换为语音模式'
+  }
+  if (text.includes('unauthorized') || text.includes('401')) {
+    return '数字人鉴权失败，请检查 D-ID 配置'
+  }
+  if (text.includes('timeout') || text.includes('超时')) {
+    return '数字人生成超时，已切换为语音模式'
+  }
+  return '数字人暂时不可用，已切换为语音模式'
 }
 
 async function handleComplete() {
@@ -633,6 +1164,10 @@ async function handleComplete() {
       customClass: 'complete-loading-mask'
     })
 
+    if (alwaysOnModeEnabled.value) {
+      await stopAlwaysOnVoice()
+    }
+
     if (userCameraRef.value) {
       try {
         await userCameraRef.value.stopCamera()
@@ -645,8 +1180,7 @@ async function handleComplete() {
     await interviewStore.completeInterview(interviewId.value)
     ElMessage.success('面试已完成')
     await loadInterviewDetail()
-    await loadEvaluation()
-  } catch (error) {
+    } catch (error) {
     if (error !== 'cancel') {
       console.error('完成面试失败', error)
     }
@@ -656,10 +1190,6 @@ async function handleComplete() {
     }
     loading.value = false
   }
-}
-
-function handleViewReport() {
-  router.push(`/interviews/${interviewId.value}/report`)
 }
 
 function scrollToBottom() {
@@ -750,14 +1280,6 @@ function getDimensionLabel(key) {
   return labelMap[key] || key
 }
 
-function getRecommendationClass(recommendation) {
-  if (recommendation.includes('建议') || recommendation.includes('通过')) {
-    return 'recommend-positive'
-  } else if (recommendation.includes('不') || recommendation.includes('拒绝')) {
-    return 'recommend-negative'
-  }
-  return 'recommend-neutral'
-}
 
 function escapeHtml(input = '') {
   return String(input)
@@ -800,22 +1322,41 @@ function handleRestoreAllMessages() {
   ElMessage.success('已恢复显示所有消息')
 }
 
-// 璇煶鎺у埗鏂规硶
+// 语音控制方法
 function toggleMute() {
   interviewStore.toggleMute()
   ElMessage.info(isMuted.value ? '已静音' : '已取消静音')
 }
 
-// 璇煶璇嗗埆鐩稿叧鏂规硶
+// 语音识别相关方法
 async function initSpeechRecognition() {
-  // 鍒涘缓 ASR 褰曢煶鍣?
   asrRecorder.value = new ASRRecorder()
   isSpeechSupported.value = asrRecorder.value.supported
+  isAlwaysOnSupported.value = Boolean(
+    asrRecorder.value.supported &&
+    (window.AudioContext || window.webkitAudioContext)
+  )
+  voiceDebug('initSpeechRecognition: support check', {
+    speechSupported: isSpeechSupported.value,
+    alwaysOnSupported: isAlwaysOnSupported.value
+  })
 
-  // 妫€鏌ュ悗绔?ASR 鏈嶅姟鐘舵€?
+  try {
+    const runtimeVoiceConfig = await interviewApi.getVoiceConfig()
+    voiceConfig.value = {
+      ...DEFAULT_VOICE_CONFIG,
+      ...(runtimeVoiceConfig || {})
+    }
+    voiceDebug('initSpeechRecognition: voice config loaded', voiceConfig.value)
+  } catch (error) {
+    console.error('加载语音配置失败:', error)
+    voiceConfig.value = { ...DEFAULT_VOICE_CONFIG }
+  }
+
   try {
     const status = await checkASRStatus()
     asrServiceAvailable.value = status.available
+    voiceDebug('initSpeechRecognition: ASR status', status)
 
     if (!status.available) {
       ElMessage.warning({
@@ -825,12 +1366,45 @@ async function initSpeechRecognition() {
       })
     }
   } catch (error) {
-    // 妫€鏌?ASR 鏈嶅姟澶辫触
     asrServiceAvailable.value = false
   }
 
-  if (isSpeechSupported.value) {
-  } else {
+  if (isAlwaysOnSupported.value) {
+    voiceSession.value = createVoiceSessionController({
+      ...buildVoiceSessionOptions(),
+      onSegmentReady: (blob, stats) => {
+        voiceDebug('initSpeechRecognition: onSegmentReady callback', {
+          stats,
+          blobSize: blob?.size,
+          blobType: blob?.type
+        })
+        enqueueVoiceSegment({ blob, stats })
+      },
+      onSpeechStateChange: ({ state, rms, threshold, noiseFloor, voiceActive }) => {
+        voiceState.value = state
+        voiceRms.value = Number(rms || 0)
+        voiceThreshold.value = Number(threshold || 0)
+        voiceNoiseFloor.value = Number(noiseFloor || 0)
+        voiceDetected.value = Boolean(voiceActive || state === 'speech_detected' || state === 'segment_closing' || state === 'barge_in')
+        if (state !== 'armed' || voiceDetected.value) {
+          voiceDebug('initSpeechRecognition: VAD update', {
+            state,
+            rms: voiceRms.value,
+            threshold: voiceThreshold.value,
+            noiseFloor: voiceNoiseFloor.value,
+            voiceDetected: voiceDetected.value
+          })
+        }
+      },
+      onBargeIn: () => {
+        voiceDebug('initSpeechRecognition: barge-in callback')
+        interviewStore.stopVoice()
+      },
+      shouldDetectBargeIn: () => isPlaying.value
+    })
+  }
+
+  if (!isSpeechSupported.value) {
     ElMessage.info({
       message: '当前浏览器不支持录音功能，请使用 Chrome、Edge 或 Firefox',
       duration: 3000,
@@ -840,6 +1414,26 @@ async function initSpeechRecognition() {
 }
 
 function toggleSpeechRecognition() {
+  voiceDebug('toggleSpeechRecognition: clicked', {
+    enabled: voiceConfig.value.enabled,
+    alwaysOnCapable: isAlwaysOnCapable.value,
+    alwaysOnModeEnabled: alwaysOnModeEnabled.value,
+    isListening: isListening.value
+  })
+  if (!voiceConfig.value.enabled) {
+    ElMessage.warning('语音能力已在配置中禁用')
+    return
+  }
+
+  if (isAlwaysOnCapable.value) {
+    if (alwaysOnModeEnabled.value) {
+      stopAlwaysOnVoice()
+    } else {
+      startAlwaysOnVoice()
+    }
+    return
+  }
+
   if (isListening.value) {
     stopSpeechRecognition()
   } else {
@@ -847,7 +1441,127 @@ function toggleSpeechRecognition() {
   }
 }
 
+async function startAlwaysOnVoice() {
+  voiceDebug('startAlwaysOnVoice: requested')
+  if (!isAlwaysOnSupported.value) {
+    ElMessage.warning('当前浏览器不支持常开语音，请改用点击说话')
+    return
+  }
+
+  if (!voiceConfig.value.enabled || !voiceConfig.value.always_on_enabled) {
+    ElMessage.warning('常开语音已在配置中禁用')
+    return
+  }
+
+  if (!asrServiceAvailable.value) {
+    ElMessage.warning('语音识别服务不可用，请检查后端配置')
+    return
+  }
+
+  try {
+    await voiceSession.value?.startAlwaysOn()
+    alwaysOnModeEnabled.value = true
+    voiceState.value = 'armed'
+    const status = voiceSession.value?.getStatus?.()
+    voiceRms.value = Number(status?.rms || 0)
+    voiceThreshold.value = Number(status?.threshold || 0)
+    voiceNoiseFloor.value = Number(status?.noiseFloor || 0)
+    voiceDetected.value = false
+    voiceDebug('startAlwaysOnVoice: started', status)
+    ElMessage.success('常开语音已开启')
+  } catch (error) {
+    console.error('开启常开语音失败:', error)
+    ElMessage.error(`开启常开语音失败: ${error.message}`)
+  }
+}
+
+async function stopAlwaysOnVoice() {
+  voiceDebug('stopAlwaysOnVoice: requested')
+  try {
+    await voiceSession.value?.stopAlwaysOn()
+  } catch (error) {
+    console.error('关闭常开语音失败:', error)
+  } finally {
+    alwaysOnModeEnabled.value = false
+    voiceState.value = 'idle'
+    voiceQueue.value = []
+    isTranscribing.value = false
+    voiceQueueBusy.value = false
+    voiceRms.value = 0
+    voiceThreshold.value = 0
+    voiceNoiseFloor.value = 0
+    voiceDetected.value = false
+  }
+}
+
+async function reportExpressionAudioFromResult({
+  segmentId,
+  source,
+  startedAt,
+  endedAt,
+  text,
+  segmentStats = null
+}) {
+  if (!expressionConfig.value.enabled || !interviewId.value) {
+    return
+  }
+
+  const durationMs = segmentStats?.durationMs ||
+    Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime()) ||
+    0
+  const speechDurationMs = segmentStats?.speechDurationMs || durationMs
+  const payload = buildAudioExpressionPayload({
+    segmentId,
+    stage: currentStage.value || '',
+    source,
+    startedAt,
+    endedAt,
+    transcriptText: text,
+    durationMs,
+    speechDurationMs,
+    avgVolume: source === 'always_on_voice' ? voiceRms.value : 0,
+    volumeVariation: source === 'always_on_voice'
+      ? Math.abs(Number(voiceRms.value || 0) - Number(voiceNoiseFloor.value || 0))
+      : 0,
+    interruptionRecoveryMs: segmentStats?.bargeInTriggered ? Number(voiceConfig.value.barge_in_ms || 0) : 0
+  })
+  try {
+    await reportAudioExpressionSegment(interviewId.value, payload)
+  } catch (error) {
+    console.error('上传音频表达特征失败:', error)
+  }
+}
+
+function ensureExpressionVideoReporter() {
+  if (!expressionConfig.value.enabled || expressionVideoReporter.value || !interviewId.value) {
+    return
+  }
+  expressionVideoReporter.value = createVideoExpressionReporter({
+    interviewId: interviewId.value,
+    getStage: () => currentStage.value || '',
+    getVideoElement: () => userCameraRef.value?.getVideoElement?.(),
+    intervalMs: Number(expressionConfig.value.video_sample_interval_ms || 1500)
+  })
+}
+
+async function loadExpressionRuntimeConfig() {
+  try {
+    expressionConfig.value = {
+      ...expressionConfig.value,
+      ...(await loadExpressionConfig())
+    }
+  } catch (error) {
+    console.error('加载表达分析配置失败:', error)
+  }
+}
+
 async function startSpeechRecognition() {
+  voiceDebug('startSpeechRecognition: requested')
+  if (!voiceConfig.value.enabled) {
+    ElMessage.warning('语音能力已在配置中禁用')
+    return
+  }
+
   if (!isSpeechSupported.value) {
     ElMessage.warning('当前浏览器不支持录音功能')
     return
@@ -865,16 +1579,18 @@ async function startSpeechRecognition() {
 
   try {
     isListening.value = true
-    inputMessage.value = '' // 娓呯┖杈撳叆妗?鍑嗗鎺ユ敹鏂扮殑璇煶杈撳叆
+    voiceState.value = 'speech_detected'
+    manualRecordingStartedAt.value = new Date().toISOString()
 
     ElMessage.info({
       message: '正在录音...点击停止按钮结束',
       duration: 3000
     })
 
-    // 寮€濮嬪綍闊?
+    // 开始录音
     await asrRecorder.value.startRecording()
-    // 褰曢煶宸插紑濮?
+    voiceDebug('startSpeechRecognition: recording started')
+    // 录音已开始
 
   } catch (error) {
     console.error('启动录音失败:', error)
@@ -887,13 +1603,17 @@ async function startSpeechRecognition() {
 }
 
 async function stopSpeechRecognition() {
+  voiceDebug('stopSpeechRecognition: requested')
   if (!asrRecorder.value || !isListening.value) {
     return
   }
 
   try {
-    // 鍋滄褰曢煶骞惰幏鍙栭煶棰?Blob
     const audioBlob = await asrRecorder.value.stopRecording()
+    voiceDebug('stopSpeechRecognition: blob received', {
+      size: audioBlob?.size,
+      type: audioBlob?.type
+    })
 
     if (!audioBlob || audioBlob.size === 0) {
       ElMessage.warning({
@@ -904,9 +1624,9 @@ async function stopSpeechRecognition() {
       return
     }
 
-    // 褰曢煶宸插仠姝? 寮€濮嬭瘑鍒?
     isTranscribing.value = true
     isListening.value = false
+    voiceState.value = 'transcribing'
 
     ElMessage.info({
       message: '正在识别语音...',
@@ -914,17 +1634,31 @@ async function stopSpeechRecognition() {
       iconClass: 'el-icon-loading'
     })
 
-    // 璋冪敤鍚庣 ASR API
-    const text = await transcribeAudio(audioBlob)
+    const result = await transcribeAudio(audioBlob, {
+      source: 'manual_voice'
+    })
+    const text = normalizeRecognizedText(result?.text)
+    voiceDebug('stopSpeechRecognition: transcription result', { result, normalizedText: text })
+    await reportExpressionAudioFromResult({
+      segmentId: result?.segment_id || `manual-${Date.now()}`,
+      source: 'manual_voice',
+      startedAt: manualRecordingStartedAt.value || new Date(Date.now() - Number(result?.duration_ms || 0)).toISOString(),
+      endedAt: new Date().toISOString(),
+      text,
+      segmentStats: {
+        durationMs: Number(result?.duration_ms || 0),
+        speechDurationMs: Number(result?.duration_ms || 0),
+        bargeInTriggered: false
+      }
+    })
 
-    if (text && text.trim()) {
-      inputMessage.value = text.trim()
+    if (text) {
+      setInputMessageSilently(text)
       ElMessage.success({
         message: '识别完成',
         duration: 1500
       })
 
-      // 鑷姩鑱氱劍鍒拌緭鍏ユ,鏂逛究鐢ㄦ埛缂栬緫
       nextTick(() => {
         const textarea = document.querySelector('.input-area textarea')
         if (textarea) {
@@ -945,13 +1679,17 @@ async function stopSpeechRecognition() {
       duration: 3000
     })
   } finally {
+    manualRecordingStartedAt.value = ''
     isListening.value = false
     isTranscribing.value = false
+    if (!alwaysOnModeEnabled.value) {
+      voiceState.value = 'idle'
+    }
   }
 }
 
 function handleKeyPress(event) {
-  // Ctrl+M 蹇嵎閿垏鎹㈣闊宠瘑鍒?
+  // Ctrl+M 快捷键切换语音识别
   if (event.ctrlKey && event.key === 'm') {
     event.preventDefault()
     if (isSpeechSupported.value) {
@@ -961,20 +1699,20 @@ function handleKeyPress(event) {
 }
 
 function handleSelectMessage(messageId) {
-  // 杩欎釜鍑芥暟宸插簾寮冿紝浣跨敤 handleLocateMessage 鍜?handleSwitchToBranch 鏇夸唬
+  // 这个函数已废弃，使用 handleLocateMessage 和 handleSwitchToBranch 替代
 }
 
-// 瀹氫綅娑堟伅锛堝彧婊氬姩锛屼笉鍒囨崲鍒嗘敮锛?
+// 定位消息（只滚动，不切换分支）
 function handleLocateMessage(messageId) {
-  // 鎵惧埌瀵瑰簲娑堟伅鐨勭储寮?
+  // 找到对应消息的索引
   const index = messages.value.findIndex(m => m.id === messageId)
   if (index >= 0) {
-    // 婊氬姩鍒板搴旀秷鎭?
+    // 滚动到对应消息
     nextTick(() => {
       const messageElements = messagesContainer.value?.querySelectorAll('.message-wrapper')
       if (messageElements && messageElements[index]) {
         messageElements[index].scrollIntoView({ behavior: 'smooth', block: 'center' })
-        // 娣诲姞涓存椂楂樹寒鏍峰紡
+        // 添加临时高亮样式
         messageElements[index].classList.add('highlight')
         setTimeout(() => {
           messageElements[index].classList.remove('highlight')
@@ -986,7 +1724,7 @@ function handleLocateMessage(messageId) {
   }
 }
 
-// 鍒囨崲鍒拌鑺傜偣鐨勫垎鏀?
+// 切换到该节点的分支
 async function handleSwitchToBranch(messageId) {
   try {
     await interviewStore.switchToBranch(messageId)
@@ -998,7 +1736,7 @@ async function handleSwitchToBranch(messageId) {
 }
 
 
-// 鍥炴函鍒版寚瀹氭秷鎭?
+// 回溯到指定消息
 async function handleRewindToMessage(messageIndex) {
   try {
     const targetMessage = messages.value[messageIndex]
@@ -1027,13 +1765,16 @@ async function handleRewindToMessage(messageIndex) {
   }
 }
 
-// 鎽勫儚澶寸浉鍏虫柟娉?
+// 摄像头相关方法
 function handleCameraStarted(stream) {
   console.log('摄像头已启动', stream)
+  ensureExpressionVideoReporter()
+  expressionVideoReporter.value?.start?.()
 }
 
 function handleCameraStopped() {
   console.log('摄像头已停止')
+  expressionVideoReporter.value?.stop?.()
 }
 
 function handleCameraError(error) {
@@ -1042,7 +1783,7 @@ function handleCameraError(error) {
 </script>
 
 <style>
-/* 鍏ㄥ眬鏍峰紡 - 浠呭湪闈㈣瘯璇︽儏椤甸殣钘忛《閮ㄥ鑸爮 */
+/* 全局样式 - 仅在面试详情页隐藏顶部导航栏 */
 body.interview-immersive-mode .app-header {
   display: none !important;
 }
@@ -1061,7 +1802,7 @@ body.interview-immersive-mode .app-container {
   min-height: 100vh !important;
 }
 
-/* 鍏ㄥ睆瀵硅瘽娴佺▼鍥炬牱寮?*/
+/* 全屏对话流程图样式 */
 .fullscreen-graph-overlay {
   position: fixed;
   top: 0;
@@ -1073,10 +1814,10 @@ body.interview-immersive-mode .app-container {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 鍚敤纭欢鍔犻€?*/
+  /* 启用硬件加速 */
   transform: translateZ(0);
   will-change: transform;
-  /* 浼樺寲娓叉煋 */
+  /* 优化渲染 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -1091,7 +1832,7 @@ body.interview-immersive-mode .app-container {
   padding: 0 32px;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  /* 浼樺寲娓叉煋 */
+  /* 优化渲染 */
   transform: translateZ(0);
   will-change: transform;
 
@@ -1101,7 +1842,7 @@ body.interview-immersive-mode .app-container {
       font-size: 20px;
       font-weight: 600;
       color: #303133;
-      /* 鏂囧瓧鎶楅敮榻?*/
+      /* 文字抗锯齿 */
       -webkit-font-smoothing: antialiased;
     }
 
@@ -1126,20 +1867,20 @@ body.interview-immersive-mode .app-container {
   min-height: 0;
   overflow: hidden;
   padding: 0;
-  /* 浼樺寲婊氬姩鎬ц兘 */
+  /* 优化滚动性能 */
   overflow-x: hidden;
   overflow-y: hidden;
-  /* 鍚敤纭欢鍔犻€?*/
+  /* 启用硬件加速 */
   transform: translateZ(0);
   will-change: scroll-position;
-  /* 浼樺寲娓叉煋 */
+  /* 优化渲染 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* 纭繚鍗犳弧鏁翠釜鍙敤绌洪棿 */
+  /* 确保占满整个可用空间 */
   width: 100%;
-  height: calc(100vh - 80px); /* 鍑忓幓 header 楂樺害 */
+  height: calc(100vh - 80px); /* 减去 header 高度 */
 
-  /* 绉婚櫎婊氬姩鏉?璁╁唴閮ㄧ粍浠跺鐞?*/
+  /* 移除滚动条，让内部组件处理 */
   &::-webkit-scrollbar {
     display: none;
   }
@@ -1217,9 +1958,9 @@ body.interview-immersive-mode .app-container {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
+
 </style>
 
 <style scoped lang="scss">
 @import '@/styles/immersive-interview-new.scss';
 </style>
-

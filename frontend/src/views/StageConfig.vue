@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="stage-config" v-loading="loading">
     <h2 class="stage-title">面试阶段管理</h2>
 
@@ -14,63 +14,60 @@
         </div>
       </template>
 
-          <el-empty v-if="stageList.length === 0" description="暂无阶段，请先新增阶段" />
+      <el-empty v-if="stageList.length === 0" description="暂无阶段，请先新增阶段" />
 
-          <div v-else class="flow-scroll">
-            <div class="flow-track">
-              <div
-                v-for="(stage, index) in stageList"
-                :key="stage.stage"
-                class="flow-item"
-                :class="{ 'is-selected': stage.stage === selectedStageKey }"
+      <div v-else class="flow-scroll">
+        <div class="flow-track">
+          <div
+            v-for="(stage, index) in stageList"
+            :key="stage.stage"
+            class="flow-item"
+            :class="{ 'is-selected': stage.stage === selectedStageKey }"
+          >
+            <div class="node-row">
+              <button
+                class="stage-index"
+                :class="{ 'is-disabled': stage.enabled === false }"
+                type="button"
+                @click="selectStage(stage.stage)"
               >
-                <div class="node-row">
-                  <button
-                    class="stage-index"
-                    :class="{ 'is-disabled': stage.enabled === false }"
-                    type="button"
-                    @click="selectStage(stage.stage)"
-                  >
-                    {{ index + 1 }}
-                  </button>
-                  <div
-                    v-if="index < stageList.length - 1"
-                    class="stage-line"
-                    :class="{ 'is-active': index < selectedStageIndex }"
-                  ></div>
-                </div>
+                {{ index + 1 }}
+              </button>
+              <div
+                v-if="index < stageList.length - 1"
+                class="stage-line"
+                :class="{ 'is-active': index < selectedStageIndex }"
+              ></div>
+            </div>
 
-                <div class="stage-card" @click="selectStage(stage.stage)">
-                  <div class="stage-card-title">
-                    <span>{{ stage.name }}</span>
-                    <el-tag v-if="stage.stage === selectedStageKey" size="small" type="primary">编辑中</el-tag>
-                  </div>
-                  <div class="stage-meta">{{ stage.time_allocation }} 分钟 · {{ stage.min_turns }}-{{ stage.max_turns }} 轮</div>
-                  <p class="stage-desc">{{ stage.description || '暂无阶段描述' }}</p>
-                </div>
-
-                <div class="stage-actions">
-                  <el-button size="small" @click="moveLeft(index)" :disabled="index === 0">左移</el-button>
-                  <el-button size="small" @click="moveRight(index)" :disabled="index === stageList.length - 1">右移</el-button>
-                  <el-popconfirm
-                    title="确定删除这个阶段吗？"
-                    @confirm="removeStage(index)"
-                  >
-                    <template #reference>
-                      <el-button size="small" type="danger" plain :disabled="stageList.length <= 1">删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                </div>
+            <div class="stage-card" @click="selectStage(stage.stage)">
+              <div class="stage-card-title">
+                <span>{{ stage.name }}</span>
+                <el-tag v-if="stage.stage === selectedStageKey" size="small" type="primary">编辑中</el-tag>
               </div>
+              <div class="stage-meta">{{ stage.time_allocation }} 分钟 · {{ stage.min_turns }}-{{ stage.max_turns }} 轮</div>
+              <p class="stage-desc">{{ stage.description || '暂无阶段描述' }}</p>
+            </div>
+
+            <div class="stage-actions">
+              <el-button size="small" @click="moveLeft(index)" :disabled="index === 0">左移</el-button>
+              <el-button size="small" @click="moveRight(index)" :disabled="index === stageList.length - 1">右移</el-button>
+              <el-popconfirm title="确定删除这个阶段吗？" @confirm="removeStage(index)">
+                <template #reference>
+                  <el-button size="small" type="danger" plain :disabled="stageList.length <= 1">删除</el-button>
+                </template>
+              </el-popconfirm>
             </div>
           </div>
+        </div>
+      </div>
     </el-card>
 
     <el-card v-if="selectedStage" class="editor-card" shadow="never">
       <template #header>
         <div class="card-header">
           <div class="editor-header-left">
-            <span>编辑阶段：{{ selectedStage.name }}</span>
+            <span>阶段配置：{{ selectedStage.name }}</span>
             <el-tag>{{ selectedStage.stage }}</el-tag>
           </div>
           <div class="editor-header-actions">
@@ -79,6 +76,12 @@
           </div>
         </div>
       </template>
+
+      <div class="stage-editor-shell">
+        <section class="editor-section">
+          <div class="section-heading">
+            <h3>阶段信息</h3>
+          </div>
 
           <el-form :model="selectedStage" label-width="120px">
             <el-form-item label="阶段标识">
@@ -95,12 +98,12 @@
 
             <el-row :gutter="20">
               <el-col :xs="24" :md="8">
-                <el-form-item label="最小轮次">
+                <el-form-item label="最少轮次">
                   <el-input-number v-model="selectedStage.min_turns" :min="1" :max="20" style="width: 100%" />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :md="8">
-                <el-form-item label="最大轮次">
+                <el-form-item label="最多轮次">
                   <el-input-number v-model="selectedStage.max_turns" :min="1" :max="20" style="width: 100%" />
                 </el-form-item>
               </el-col>
@@ -124,8 +127,90 @@
               />
             </el-form-item>
           </el-form>
-    </el-card>
+        </section>
 
+        <section class="editor-section editor-section--binding">
+          <div class="section-heading">
+            <div>
+              <h3>阶段工具绑定</h3>
+              <p class="binding-subtitle">拖动下方工具气泡到当前阶段的触发器区域，点击气泡右上角叉号可移除。</p>
+            </div>
+          </div>
+
+          <div class="binding-layout">
+            <section class="tool-palette">
+              <div class="palette-header">
+                <span>工具气泡</span>
+                <el-tag type="info">{{ availableToolNames.length }} 个工具</el-tag>
+              </div>
+
+              <el-empty v-if="availableToolNames.length === 0" description="暂无工具，请先到工具配置页新增 Provider" />
+
+              <div v-else class="palette-list">
+                <button
+                  v-for="toolName in availableToolNames"
+                  :key="toolName"
+                  class="tool-bubble tool-bubble--palette"
+                  type="button"
+                  draggable="true"
+                  @dragstart="handleToolDragStart(toolName)"
+                  @dragend="handleToolDragEnd"
+                >
+                  <span>{{ toolName }}</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="binding-zones">
+              <div
+                v-for="trigger in triggerKeys"
+                :key="trigger"
+                class="trigger-zone"
+                :class="{ 'is-over': dragOverTrigger === trigger }"
+                @dragover.prevent="handleTriggerDragOver(trigger)"
+                @dragleave="handleTriggerDragLeave(trigger)"
+                @drop.prevent="handleTriggerDrop(trigger)"
+              >
+                <div class="trigger-header">
+                  <div>
+                    <strong>{{ triggerLabelMap[trigger] }}</strong>
+                    <p>{{ triggerDescMap[trigger] }}</p>
+                  </div>
+                  <el-tag size="small">{{ currentBinding.trigger_map[trigger].length }} 个</el-tag>
+                </div>
+
+                <div class="trigger-bubbles">
+                  <button
+                    v-for="toolName in currentBinding.trigger_map[trigger]"
+                    :key="`${trigger}-${toolName}`"
+                    class="tool-bubble tool-bubble--assigned"
+                    type="button"
+                    draggable="true"
+                    @dragstart="handleToolDragStart(toolName)"
+                    @dragend="handleToolDragEnd"
+                  >
+                    <span>{{ toolName }}</span>
+                    <span
+                      class="bubble-close"
+                      role="button"
+                      tabindex="0"
+                      @click.stop="removeToolFromTrigger(trigger, toolName)"
+                      @keydown.enter.stop="removeToolFromTrigger(trigger, toolName)"
+                    >
+                      ×
+                    </span>
+                  </button>
+
+                  <div v-if="currentBinding.trigger_map[trigger].length === 0" class="trigger-empty">
+                    将工具气泡拖到这里
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -138,22 +223,71 @@ const loading = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
 
+const triggerKeys = ['interview_start', 'stage_enter', 'user_turn']
+const triggerLabelMap = {
+  interview_start: 'interview_start',
+  stage_enter: 'stage_enter',
+  user_turn: 'user_turn'
+}
+const triggerDescMap = {
+  interview_start: '开始面试时触发，适合首轮预加载。',
+  stage_enter: '进入当前阶段时触发，适合阶段级预取。',
+  user_turn: '用户每轮发言后触发，适合实时追问与补充。'
+}
+
 const fullConfig = reactive({
   base_system_prompt: '',
   stages: {},
-  llm: {}
+  llm: {},
+  tools: {
+    providers: {},
+    bindings: {}
+  }
 })
 
 const stageList = ref([])
 const selectedStageKey = ref('')
+const draggingToolName = ref('')
+const dragOverTrigger = ref('')
 
 const selectedStageIndex = computed(() => stageList.value.findIndex((s) => s.stage === selectedStageKey.value))
 const selectedStage = computed(() => stageList.value.find((s) => s.stage === selectedStageKey.value) || null)
 const totalDuration = computed(() => stageList.value.reduce((sum, s) => sum + (s.time_allocation || 0), 0))
+const availableToolNames = computed(() => Object.keys(fullConfig.tools?.providers || {}))
+const currentBinding = computed(() => {
+  const stageKey = selectedStageKey.value
+  if (!stageKey) return createEmptyBinding()
+  if (!fullConfig.tools.bindings[stageKey]) {
+    fullConfig.tools.bindings[stageKey] = createEmptyBinding()
+  }
+  return fullConfig.tools.bindings[stageKey]
+})
 
 onMounted(async () => {
   await loadConfig()
 })
+
+function createEmptyBinding() {
+  return {
+    trigger_map: {
+      interview_start: [],
+      stage_enter: [],
+      user_turn: []
+    },
+    cache_only: false
+  }
+}
+
+function ensureBinding(binding = {}) {
+  return {
+    trigger_map: {
+      interview_start: Array.isArray(binding?.trigger_map?.interview_start) ? [...binding.trigger_map.interview_start] : [],
+      stage_enter: Array.isArray(binding?.trigger_map?.stage_enter) ? [...binding.trigger_map.stage_enter] : [],
+      user_turn: Array.isArray(binding?.trigger_map?.user_turn) ? [...binding.trigger_map.user_turn] : []
+    },
+    cache_only: Boolean(binding?.cache_only)
+  }
+}
 
 function toStageList(stagesObj = {}) {
   return Object.values(stagesObj)
@@ -162,17 +296,6 @@ function toStageList(stagesObj = {}) {
       ...s,
       order: Number.isFinite(s.order) ? s.order : idx + 1
     }))
-}
-
-function buildStagesObject() {
-  const next = {}
-  stageList.value.forEach((s, idx) => {
-    next[s.stage] = {
-      ...s,
-      order: idx + 1
-    }
-  })
-  return next
 }
 
 function selectStage(stageKey) {
@@ -184,6 +307,16 @@ async function loadConfig() {
   try {
     const data = await interviewApi.getPromptConfig()
     Object.assign(fullConfig, data)
+    fullConfig.tools = {
+      providers: {},
+      bindings: {},
+      ...(data?.tools || {})
+    }
+    const normalizedBindings = {}
+    Object.keys(data?.stages || {}).forEach((stageKey) => {
+      normalizedBindings[stageKey] = ensureBinding(fullConfig.tools.bindings?.[stageKey] || {})
+    })
+    fullConfig.tools.bindings = normalizedBindings
     stageList.value = toStageList(data?.stages || {})
     selectedStageKey.value = stageList.value[0]?.stage || ''
   } catch (error) {
@@ -215,6 +348,7 @@ function removeStage(index) {
   }
   const removed = stageList.value[index]
   stageList.value.splice(index, 1)
+  delete fullConfig.tools.bindings[removed.stage]
   if (selectedStageKey.value === removed.stage) {
     selectedStageKey.value = stageList.value[Math.max(0, index - 1)]?.stage || stageList.value[0]?.stage || ''
   }
@@ -258,6 +392,7 @@ async function openCreateDialog() {
     }
 
     stageList.value.push(nextStage)
+    fullConfig.tools.bindings[stageKey] = createEmptyBinding()
     selectedStageKey.value = stageKey
     ElMessage.success('已新增阶段，请编辑后保存')
   } catch (error) {
@@ -278,10 +413,21 @@ function validateStage(stage) {
     return false
   }
   if (stage.min_turns > stage.max_turns) {
-    ElMessage.warning(`阶段 ${stage.name} 的最小轮次不能大于最大轮次`)
+    ElMessage.warning(`阶段 ${stage.name} 的最少轮次不能大于最多轮次`)
     return false
   }
   return true
+}
+
+function buildStagesObject() {
+  const next = {}
+  stageList.value.forEach((s, idx) => {
+    next[s.stage] = {
+      ...s,
+      order: idx + 1
+    }
+  })
+  return next
 }
 
 async function handleSaveCurrentStage() {
@@ -302,19 +448,21 @@ async function handleSaveCurrentStage() {
 
     saving.value = true
 
-    // 只持久化当前阶段：从已保存配置出发，仅替换当前阶段
-    const persistedStages = { ...(fullConfig.stages || {}) }
-    persistedStages[selectedStage.value.stage] = {
-      ...selectedStage.value,
-      order: persistedStages[selectedStage.value.stage]?.order ?? (selectedStageIndex.value + 1),
-    }
-
     const payload = {
       ...fullConfig,
-      stages: persistedStages
+      stages: buildStagesObject(),
+      tools: {
+        ...fullConfig.tools,
+        bindings: {
+          ...(fullConfig.tools.bindings || {}),
+          [selectedStage.value.stage]: ensureBinding(fullConfig.tools.bindings?.[selectedStage.value.stage] || {})
+        }
+      }
     }
+
     await interviewApi.updatePromptConfig(payload)
     Object.assign(fullConfig, payload)
+    stageList.value = toStageList(payload.stages)
     ElMessage.success('当前阶段保存成功')
   } catch (error) {
     if (error !== 'cancel') {
@@ -340,20 +488,7 @@ async function handleResetCurrentStage() {
     })
 
     resetting.value = true
-
-    const persisted = fullConfig.stages?.[selectedStage.value.stage]
-    if (!persisted) {
-      ElMessage.warning('当前阶段没有已保存版本可重置')
-      return
-    }
-
-    const idx = selectedStageIndex.value
-    if (idx >= 0) {
-      stageList.value[idx] = {
-        ...stageList.value[idx],
-        ...persisted,
-      }
-    }
+    await loadConfig()
     ElMessage.success('当前阶段已重置')
   } catch (error) {
     if (error !== 'cancel') {
@@ -364,11 +499,48 @@ async function handleResetCurrentStage() {
     resetting.value = false
   }
 }
+
+function handleToolDragStart(toolName) {
+  draggingToolName.value = toolName
+}
+
+function handleToolDragEnd() {
+  draggingToolName.value = ''
+  dragOverTrigger.value = ''
+}
+
+function handleTriggerDragOver(trigger) {
+  dragOverTrigger.value = trigger
+}
+
+function handleTriggerDragLeave(trigger) {
+  if (dragOverTrigger.value === trigger) {
+    dragOverTrigger.value = ''
+  }
+}
+
+function handleTriggerDrop(trigger) {
+  const toolName = draggingToolName.value
+  dragOverTrigger.value = ''
+  if (!toolName || !selectedStageKey.value) return
+
+  const binding = currentBinding.value
+  const currentList = binding.trigger_map[trigger] || []
+  if (!currentList.includes(toolName)) {
+    binding.trigger_map[trigger] = [...currentList, toolName]
+  }
+  draggingToolName.value = ''
+}
+
+function removeToolFromTrigger(trigger, toolName) {
+  const binding = currentBinding.value
+  binding.trigger_map[trigger] = (binding.trigger_map[trigger] || []).filter((item) => item !== toolName)
+}
 </script>
 
 <style scoped lang="scss">
 .stage-config {
-  max-width: 1400px;
+  max-width: 1440px;
   margin: 0 auto;
 }
 
@@ -387,7 +559,15 @@ async function handleResetCurrentStage() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   font-weight: 600;
+}
+
+.binding-subtitle {
+  margin: 6px 0 0;
+  color: #8a93a3;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .editor-header-left {
@@ -396,11 +576,7 @@ async function handleResetCurrentStage() {
   gap: 8px;
 }
 
-.editor-header-actions {
-  display: flex;
-  gap: 8px;
-}
-
+.editor-header-actions,
 .header-meta {
   display: flex;
   gap: 8px;
@@ -419,110 +595,243 @@ async function handleResetCurrentStage() {
 }
 
 .flow-item {
-  width: 190px;
-  flex: 0 0 190px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flow-item.is-selected .stage-card {
+  border-color: #111318;
+  box-shadow: 0 14px 28px rgba(17, 19, 24, 0.12);
 }
 
 .node-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
 }
 
 .stage-index {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid #409eff;
-  color: #409eff;
-  background: #fff;
-  font-size: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: none;
+  background: #111318;
+  color: #fff;
   font-weight: 700;
   cursor: pointer;
 }
 
 .stage-index.is-disabled {
-  border-color: #c0c4cc;
-  color: #909399;
-  background: #f5f7fa;
+  background: #b8bec8;
 }
 
 .stage-line {
   flex: 1;
-  height: 3px;
-  margin-left: 8px;
-  border-radius: 999px;
-  background: #dcdfe6;
+  height: 2px;
+  background: #d7dbe2;
+  margin-left: 10px;
 }
 
 .stage-line.is-active {
-  background: #409eff;
+  background: #111318;
 }
 
 .stage-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 10px;
+  border: 1px solid #dfe4ea;
+  border-radius: 16px;
   background: #fff;
-  min-height: 112px;
+  padding: 16px;
   cursor: pointer;
-}
-
-.flow-item.is-selected .stage-card {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.12);
+  transition: all 0.18s ease;
 }
 
 .stage-card-title {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.2;
-  color: #1f2937;
+  gap: 8px;
+  align-items: flex-start;
+  font-weight: 700;
 }
 
 .stage-meta {
-  margin-top: 6px;
+  margin-top: 8px;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .stage-desc {
-  margin: 6px 0 0;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.4;
+  margin: 10px 0 0;
+  color: #4b5563;
+  line-height: 1.6;
+  font-size: 14px;
 }
 
 .stage-actions {
-  margin-top: 8px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
-@media (max-width: 992px) {
-  .editor-header-actions {
-    width: 100%;
-    justify-content: flex-start;
+.stage-editor-shell {
+  display: grid;
+  gap: 24px;
+}
+
+.editor-section {
+  padding: 20px;
+  border: 1px solid #e7ebf0;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+}
+
+.editor-section--binding {
+  padding-top: 18px;
+}
+
+.section-heading {
+  margin-bottom: 18px;
+}
+
+.section-heading h3 {
+  margin: 0;
+  font-size: 17px;
+  color: #111827;
+}
+
+.binding-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.tool-palette,
+.trigger-zone {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fbfbfc;
+}
+
+.tool-palette {
+  padding: 16px;
+  align-self: start;
+}
+
+.palette-header,
+.trigger-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.palette-list,
+.trigger-bubbles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.binding-zones {
+  display: grid;
+  gap: 14px;
+}
+
+.trigger-zone {
+  padding: 16px;
+  min-height: 140px;
+  transition: all 0.16s ease;
+}
+
+.trigger-zone.is-over {
+  border-color: #111318;
+  background: #f3f5f8;
+  box-shadow: inset 0 0 0 1px rgba(17, 19, 24, 0.08);
+}
+
+.trigger-header p {
+  margin: 6px 0 0;
+  color: #8a93a3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.tool-bubble {
+  position: relative;
+  border: 1px solid #d5dbe3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 10px 16px;
+  cursor: grab;
+  transition: all 0.16s ease;
+}
+
+.tool-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(17, 24, 39, 0.08);
+}
+
+.tool-bubble--palette {
+  background: linear-gradient(135deg, #fff 0%, #f6f8fb 100%);
+}
+
+.tool-bubble--assigned {
+  padding-right: 30px;
+  background: #111318;
+  border-color: #111318;
+  color: #fff;
+}
+
+.bubble-close {
+  position: absolute;
+  top: -4px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffefe9;
+  color: #d14343;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.trigger-empty {
+  width: 100%;
+  min-height: 72px;
+  border: 1px dashed #d5dbe3;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #98a2b3;
+  font-size: 13px;
+  background: #fff;
+}
+
+@media (max-width: 960px) {
+  .binding-layout {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 1200px) {
-  .flow-item {
-    width: 172px;
-    flex: 0 0 172px;
+@media (max-width: 768px) {
+  .card-header,
+  .editor-header-actions,
+  .header-meta {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .stage-card-title {
-    font-size: 15px;
-  }
-
-  .stage-meta,
-  .stage-desc {
-    font-size: 11px;
+  .stage-actions {
+    flex-wrap: wrap;
   }
 }
 </style>

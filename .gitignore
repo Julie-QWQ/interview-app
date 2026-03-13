@@ -5,6 +5,8 @@ backend/.venv/
 backend/.env
 backend/logs/
 backend/uploads/
+backend/.mypy_cache/
+backend/.pytest_cache/
 
 # Frontend
 frontend/node_modules/
@@ -15,3 +17,5 @@ frontend/dist/
 
 .claude/
 .serena/
+
+docs/

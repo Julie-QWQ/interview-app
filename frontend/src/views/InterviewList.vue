@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="interview-list-page">
     <section class="toolbar-card">
       <div>
@@ -46,9 +46,17 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button text bg @click="viewDetail(row.id)">进入面试</el-button>
+            <el-button
+              text
+              bg
+              :disabled="!canViewReport(row)"
+              @click="viewReport(row.id)"
+            >
+              查看报告
+            </el-button>
             <el-popconfirm
               v-if="canDelete(row.status)"
               title="确认删除该面试记录？"
@@ -118,6 +126,10 @@ function viewDetail(id) {
   router.push(`/interviews/${id}`)
 }
 
+function viewReport(id) {
+  router.push(`/interviews/${id}/report`)
+}
+
 async function handleDelete(id) {
   try {
     await interviewStore.deleteInterview(id)
@@ -149,6 +161,10 @@ function getStatusType(status) {
 
 function canDelete(status) {
   return status === 'created' || status === 'completed'
+}
+
+function canViewReport(row) {
+  return row.status === 'completed' && Boolean(row.expression_report_ready)
 }
 
 function getStatusText(status) {

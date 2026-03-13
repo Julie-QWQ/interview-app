@@ -1,10 +1,10 @@
-﻿"""Data models and API schemas."""
+"""Data models and API schemas."""
 
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MessageType(str, Enum):
@@ -46,6 +46,8 @@ class ChatMessage(BaseModel):
 
 
 class MessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     role: MessageType
     content: str
@@ -55,11 +57,10 @@ class MessageResponse(BaseModel):
     tree_path: Optional[List[int]] = None
     is_active: Optional[bool] = True
 
-    class Config:
-        from_attributes = True
-
 
 class InterviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     candidate_name: str
     position: str
@@ -67,12 +68,10 @@ class InterviewResponse(BaseModel):
     skills: List[str]
     experience_level: str
     status: InterviewStatus
+    expression_report_ready: bool = False
     created_at: datetime
     updated_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 
 class InterviewDetailResponse(InterviewResponse):
@@ -95,6 +94,8 @@ class InterviewProgressResponse(BaseModel):
 
 
 class EvaluationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     interview_id: int
     overall_score: int
     dimension_scores: dict
@@ -103,9 +104,6 @@ class EvaluationResponse(BaseModel):
     recommendation: str
     feedback: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class Interview:

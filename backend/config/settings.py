@@ -4,7 +4,41 @@
 import os
 from pathlib import Path
 from typing import Any
+from copy import deepcopy
 import yaml
+
+DEFAULT_VOICE_CONFIG = {
+    'enabled': True,
+    'always_on_enabled': True,
+    'noise_floor_sample_ms': 800,
+    'speech_start_threshold': 1.6,
+    'min_speech_ms': 220,
+    'end_silence_ms': 750,
+    'max_segment_ms': 15000,
+    'pre_roll_ms': 300,
+    'barge_in_ms': 250,
+    'chunk_retention_ms': 20000,
+    'min_threshold': 0.0015,
+    'timeslice_ms': 100,
+    'auto_send_min_chars': 8,
+    'typing_grace_ms': 1200,
+    'short_noise_words': ['嗯', '啊', '哦', '额', '呃', '唉', '哈', '噢']
+}
+
+
+DEFAULT_EXPRESSION_ANALYSIS_CONFIG = {
+    'enabled': True,
+    'video_sample_interval_ms': 1500,
+    'audio_min_segments': 1,
+    'video_min_windows': 2,
+    'minimum_confidence_samples': 3,
+    'weights': {
+        'fluency': 0.3,
+        'clarity': 0.25,
+        'confidence': 0.25,
+        'composure': 0.2,
+    }
+}
 
 
 class Settings:
@@ -76,6 +110,32 @@ class Settings:
                 + ", ".join(missing)
                 + ". Please set them in backend/.env."
             )
+
+    def reload(self):
+        """Reload configuration from disk."""
+        self._config = self._load_config()
+        self._apply_env_overrides()
+        self._validate_required_secrets()
+
+    def save(self):
+        """Persist current config to disk."""
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(self._config, f, allow_unicode=True, sort_keys=False)
+
+    def update_section(self, section: str, value: Any):
+        self._config[section] = value
+        self.save()
+        self.reload()
+
+    def get_all(self) -> dict:
+        """Return a deep copy of the full effective config."""
+        return deepcopy(self._config)
+
+    def replace_all(self, config: dict):
+        """Replace the full config and persist to disk."""
+        self._config = deepcopy(config)
+        self.save()
+        self.reload()
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值，支持点号分隔的路径"""
@@ -157,12 +217,136 @@ class Settings:
         return self._config.get('asr', {}).get('model', 'whisper-1')
 
     @property
+    def asr_fallback_model(self) -> str:
+        return self._config.get('asr', {}).get('fallback_model', '')
+
+    @property
     def asr_enabled(self) -> bool:
         return self._config.get('asr', {}).get('enabled', True)
 
     @property
     def cors_origins(self) -> list:
         return self.get('cors.origins', ['*'])
+
+    @property
+    def voice_config(self) -> dict:
+        config = deepcopy(DEFAULT_VOICE_CONFIG)
+        config.update(self._config.get('voice', {}) or {})
+        words = config.get('short_noise_words', DEFAULT_VOICE_CONFIG['short_noise_words'])
+        config['short_noise_words'] = [str(word).strip() for word in words if str(word).strip()]
+        return config
+
+    # 讯飞数字人配置属性
+    @property
+    def expression_analysis_config(self) -> dict:
+        config = deepcopy(DEFAULT_EXPRESSION_ANALYSIS_CONFIG)
+        config.update(self._config.get('expression_analysis', {}) or {})
+        weights = config.get('weights', {}) or {}
+        normalized_weights = deepcopy(DEFAULT_EXPRESSION_ANALYSIS_CONFIG['weights'])
+        normalized_weights.update({
+            key: float(value)
+            for key, value in weights.items()
+            if key in normalized_weights
+        })
+        config['weights'] = normalized_weights
+        config['enabled'] = bool(config.get('enabled', True))
+        config['video_sample_interval_ms'] = int(config.get('video_sample_interval_ms', 1500))
+        config['audio_min_segments'] = int(config.get('audio_min_segments', 1))
+        config['video_min_windows'] = int(config.get('video_min_windows', 2))
+        config['minimum_confidence_samples'] = int(config.get('minimum_confidence_samples', 3))
+        return config
+
+    @property
+    def digital_human_provider(self) -> str:
+        return self._config.get('digital_human', {}).get('provider', 'disabled')
+
+    @property
+    def xunfei_app_id(self) -> str:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('app_id', '')
+
+    @property
+    def xunfei_api_key(self) -> str:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('api_key', '')
+
+    @property
+    def xunfei_api_secret(self) -> str:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('api_secret', '')
+
+    @property
+    def xunfei_scene_id(self) -> str:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('scene_id', 'default')
+
+    @property
+    def xunfei_sample_rate(self) -> int:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('sample_rate', 16000)
+
+    @property
+    def xunfei_xrtc_url(self) -> str:
+        return self._config.get('digital_human', {}).get('xunfei', {}).get('xrtc_url', 'wss://bra.xfyun.cn/rtc-api')
+
+    @property
+    def interviewer_profile_presets(self) -> list[dict]:
+        presets = self.get('profiles.interviewer_presets', []) or []
+        normalized = []
+        for preset in presets:
+            if not isinstance(preset, dict):
+                continue
+            plugin_id = str(preset.get('plugin_id', '')).strip()
+            if not plugin_id:
+                continue
+            normalized.append({
+                'plugin_id': plugin_id,
+                'type': 'interviewer',
+                'name': str(preset.get('name', '')).strip(),
+                'description': str(preset.get('description', '')).strip(),
+                'is_system': True,
+                'config': {
+                    'prompt': str(preset.get('prompt', '')).strip(),
+                    'difficulty': str(preset.get('difficulty', 'standard')).strip() or 'standard',
+                    'style_tone': str(preset.get('style_tone', 'balanced')).strip() or 'balanced',
+                    'avatar_id': str(
+                        preset.get('avatar_id', self.default_interviewer_avatar_id)
+                    ).strip(),
+                    'vcn': str(
+                        preset.get('vcn', self.default_interviewer_vcn)
+                    ).strip(),
+                    'image_url': str(
+                        preset.get(
+                            'image_url',
+                            preset.get('display_image_url', self.default_interviewer_display_image_url),
+                        )
+                    ).strip(),
+                    'display_image_url': str(preset.get('display_image_url', '')).strip(),
+                }
+            })
+        return normalized
+
+    @property
+    def default_interviewer_avatar_id(self) -> str:
+        return str(self.get('profiles.default_interviewer_avatar_id', '') or '').strip()
+
+    @property
+    def default_interviewer_vcn(self) -> str:
+        return str(self.get('profiles.default_interviewer_vcn', 'xiaofeng') or 'xiaofeng').strip()
+
+    @property
+    def default_interviewer_display_image_url(self) -> str:
+        return str(self.get('profiles.default_interviewer_display_image_url', '') or '').strip()
+
+    @property
+    def interviewer_preset_map(self) -> dict[str, dict]:
+        return {preset['plugin_id']: preset for preset in self.interviewer_profile_presets}
+
+    @property
+    def interviewer_meta_map(self) -> dict[str, dict[str, str]]:
+        meta_map = {}
+        for preset in self.interviewer_profile_presets:
+            config = preset.get('config') or {}
+            meta_map[preset['plugin_id']] = {
+                'difficulty': config.get('difficulty', 'standard'),
+                'style_tone': config.get('style_tone', 'balanced'),
+            }
+        return meta_map
 
     def __repr__(self) -> str:
         return f"Settings(config_path={self.config_path})"

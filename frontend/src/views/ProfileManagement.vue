@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="profile-management">
     <h2 class="profile-title">画像管理</h2>
 
@@ -35,6 +35,10 @@
         </button>
 
         <article v-for="row in filteredProfiles" :key="row.plugin_id" class="profile-card">
+          <div v-if="row.type === 'interviewer' && row.config?.display_image_url" class="profile-visual">
+            <img :src="row.config.display_image_url" :alt="row.name" class="profile-image" />
+          </div>
+
           <header class="profile-card-header">
             <div class="name-cell">
               <el-icon v-if="row.type === 'position'" color="#409EFF"><Briefcase /></el-icon>
@@ -54,17 +58,20 @@
 
           <div class="config-info">
             <template v-if="row.type === 'position'">
-              <el-tag size="small" v-if="row.config?.ability_weights" type="info">能力权重</el-tag>
-              <el-tag size="small" v-if="row.config?.skill_requirements?.core_skills?.length">
+              <el-tag v-if="row.config?.ability_weights" size="small" type="info">能力权重</el-tag>
+              <el-tag v-if="row.config?.skill_requirements?.core_skills?.length" size="small">
                 {{ row.config.skill_requirements.core_skills.length }} 个核心技能
               </el-tag>
             </template>
             <template v-else>
-              <el-tag size="small" v-if="row.config?.style" type="success">
-                {{ getInterviewerStyleLabel(row.config.style) }}
+              <el-tag v-if="row.config?.style_tone" size="small">
+                {{ getToneLabel(row.config.style_tone) }}
               </el-tag>
-              <el-tag size="small" v-if="row.config?.characteristics?.length" type="warning">
-                {{ row.config.characteristics.length }} 个特征
+              <el-tag v-if="row.config?.difficulty" size="small" type="warning">
+                {{ getDifficultyLabel(row.config.difficulty) }}
+              </el-tag>
+              <el-tag v-if="row.config?.prompt" size="small" type="warning">
+                已配置风格
               </el-tag>
             </template>
           </div>
@@ -89,12 +96,20 @@
         </article>
       </div>
 
-      <el-empty v-if="filteredProfiles.length === 0 && !loading" description="暂无画像数据，可先点击上方加号卡片创建" />
+      <el-empty
+        v-if="filteredProfiles.length === 0 && !loading"
+        description="暂无画像数据，可先创建一个"
+      />
     </el-card>
 
-    <ProfileConfigDialog v-model="dialogVisible" :plugin="editingPlugin" @success="handleDialogSuccess" />
+    <ProfileConfigDialog
+      v-model="dialogVisible"
+      :plugin="editingPlugin"
+      :plugin-type="activeType"
+      @success="handleDialogSuccess"
+    />
 
-    <el-dialog v-model="viewDialogVisible" :title="viewingPlugin?.name" width="600px">
+    <el-dialog v-model="viewDialogVisible" :title="viewingPlugin?.name" width="680px">
       <div v-if="viewingPlugin" class="profile-detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="类型">
@@ -102,70 +117,63 @@
               {{ viewingPlugin.type === 'position' ? '岗位画像' : '面试官画像' }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="是否系统预设">
+          <el-descriptions-item label="系统预设">
             <el-tag :type="viewingPlugin.is_system ? 'info' : ''" size="small">
               {{ viewingPlugin.is_system ? '是' : '否' }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">
-            {{ viewingPlugin.description }}
+            {{ viewingPlugin.description || '暂无描述' }}
           </el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">详细配置</el-divider>
 
-        <div v-if="viewingPlugin.type === 'position'" class="position-config">
+        <div v-if="viewingPlugin.type === 'position'">
           <div v-if="viewingPlugin.config?.ability_weights">
             <h4>能力权重配置</h4>
             <div class="weights-grid">
-              <div v-for="(weight, key) in viewingPlugin.config.ability_weights" :key="key" class="weight-item">
+              <div
+                v-for="(weight, key) in viewingPlugin.config.ability_weights"
+                :key="key"
+                class="weight-item"
+              >
                 <span class="weight-label">{{ getAbilityLabel(key) }}:</span>
-                <el-progress :percentage="weight" :stroke-width="8" />
+                <el-progress :percentage="Math.round(Number(weight || 0) * 100)" :stroke-width="8" />
               </div>
             </div>
           </div>
 
-          <div v-if="viewingPlugin.config?.required_skills?.length" style="margin-top: 16px">
-            <h4>必需技能</h4>
+          <div v-if="viewingPlugin.config?.skill_requirements?.core_skills?.length" style="margin-top: 16px">
+            <h4>核心技能</h4>
             <el-space wrap>
-              <el-tag v-for="skill in viewingPlugin.config.required_skills" :key="skill">{{ skill }}</el-tag>
+              <el-tag
+                v-for="skill in viewingPlugin.config.skill_requirements.core_skills"
+                :key="skill"
+              >
+                {{ skill }}
+              </el-tag>
             </el-space>
-          </div>
-
-          <div v-if="viewingPlugin.config?.preferred_qualifications" style="margin-top: 16px">
-            <h4>优先资格</h4>
-            <p>{{ viewingPlugin.config.preferred_qualifications }}</p>
           </div>
         </div>
 
         <div v-else class="interviewer-config">
-          <div v-if="viewingPlugin.config?.style">
-            <h4>面试风格</h4>
-            <el-descriptions :column="1" border size="small">
-              <el-descriptions-item label="提问风格">
-                {{ getInterviewerStyleLabel(viewingPlugin.config.style) }}
-              </el-descriptions-item>
-              <el-descriptions-item label="节奏">
-                {{ getPaceLabel(viewingPlugin.config.style.pace) }}
-              </el-descriptions-item>
-              <el-descriptions-item label="深度">
-                {{ getDepthLabel(viewingPlugin.config.style.depth) }}
-              </el-descriptions-item>
-            </el-descriptions>
+          <div v-if="viewingPlugin.config?.display_image_url" class="detail-visual">
+            <img :src="viewingPlugin.config.display_image_url" :alt="viewingPlugin.name" class="detail-image" />
           </div>
 
-          <div v-if="viewingPlugin.config?.characteristics?.length" style="margin-top: 16px">
-            <h4>特征标签</h4>
-            <el-space wrap>
-              <el-tag v-for="char in viewingPlugin.config.characteristics" :key="char" type="warning">
-                {{ char }}
-              </el-tag>
-            </el-space>
-          </div>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="风格强度">
+              {{ getToneLabel(viewingPlugin.config?.style_tone) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="难度等级">
+              {{ getDifficultyLabel(viewingPlugin.config?.difficulty) }}
+            </el-descriptions-item>
+          </el-descriptions>
 
-          <div v-if="viewingPlugin.config?.prompt_template" style="margin-top: 16px">
-            <h4>Prompt 模板</h4>
-            <el-input type="textarea" :model-value="viewingPlugin.config.prompt_template" :rows="6" readonly />
+          <div v-if="viewingPlugin.config?.prompt" style="margin-top: 16px">
+            <h4>面试官风格</h4>
+            <el-input type="textarea" :model-value="viewingPlugin.config.prompt" :rows="8" readonly />
           </div>
         </div>
       </div>
@@ -181,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Briefcase, User } from '@element-plus/icons-vue'
 import { profileApi } from '@/api/profile'
@@ -195,9 +203,7 @@ const editingPlugin = ref(null)
 const viewDialogVisible = ref(false)
 const viewingPlugin = ref(null)
 
-const filteredProfiles = computed(() => {
-  return profiles.value.filter((p) => p.type === activeType.value)
-})
+const filteredProfiles = computed(() => profiles.value.filter(profile => profile.type === activeType.value))
 
 async function loadProfiles() {
   loading.value = true
@@ -257,37 +263,27 @@ function getAbilityLabel(key) {
     communication: '沟通能力',
     problem_solving: '问题解决',
     leadership: '领导力',
-    learning: '学习能力'
+    learning_potential: '学习能力'
   }
   return labels[key] || key
 }
 
-function getInterviewerStyleLabel(style) {
-  if (!style) return ''
-  const styleMap = {
-    deep_technical: '技术深入型',
-    guided: '亲和引导型',
-    behavioral: '行为导向型'
+function getToneLabel(tone) {
+  const toneMap = {
+    gentle: '平和',
+    balanced: '平衡',
+    strict: '严格'
   }
-  return styleMap[style?.questioning_style] || style?.questioning_style || '标准'
+  return toneMap[tone] || '平衡'
 }
 
-function getPaceLabel(pace) {
-  const paceMap = {
-    fast: '快节奏',
-    moderate: '适中',
-    slow: '慢节奏'
+function getDifficultyLabel(difficulty) {
+  const difficultyMap = {
+    basic: '低难度',
+    standard: '中难度',
+    challenging: '高难度'
   }
-  return paceMap[pace] || pace
-}
-
-function getDepthLabel(depth) {
-  const depthMap = {
-    deep: '深入',
-    moderate: '适中',
-    light: '浅层'
-  }
-  return depthMap[depth] || depth
+  return difficultyMap[difficulty] || '中难度'
 }
 
 onMounted(() => {
@@ -331,152 +327,122 @@ onMounted(() => {
   background: transparent;
   color: #6b7280;
   border-radius: 999px;
-  padding: 6px 14px;
+  padding: 10px 18px;
   font-size: 14px;
   font-weight: 600;
-  line-height: 1;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
+  transition: all 0.2s ease;
 
-.segment-btn:hover {
-  background: #eef1f5;
-  color: #374151;
-}
-
-.segment-btn.is-active {
-  background: #111827;
-  color: #ffffff;
+  &.is-active {
+    background: #111827;
+    color: #fff;
+  }
 }
 
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  gap: 18px;
+}
+
+.create-card,
+.profile-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background: #fff;
+  min-height: 220px;
 }
 
 .create-card {
-  min-height: 208px;
-  border: 1px dashed #cfd4dc;
-  background: #fafafa;
-  border-radius: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  color: #6b7280;
+  gap: 12px;
+  color: #2563eb;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
 
-  &:hover {
-    background: #f2f3f5;
-    border-color: #b8bec8;
-  }
-
-  .create-icon {
-    font-size: 22px;
-  }
+.create-icon {
+  font-size: 28px;
 }
 
 .profile-card {
-  min-height: 208px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-
-  &:hover {
-    background: #f8f9fb;
-  }
+  padding: 18px;
 }
 
-.profile-card-header {
+.profile-visual {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: #f3f4f6;
+}
+
+.profile-image,
+.detail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-card-header,
+.profile-card-actions,
+.config-info {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-}
-
-.profile-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.profile-card-desc {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #6b7280;
-  min-height: 42px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .name-cell {
   display: flex;
   align-items: center;
   gap: 8px;
-
-  span {
-    font-weight: 500;
-  }
+  font-weight: 600;
 }
 
-.config-info {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+.profile-card-meta,
+.profile-card-desc {
+  margin-top: 12px;
+}
+
+.profile-card-desc {
+  color: #6b7280;
+  line-height: 1.6;
+  min-height: 44px;
+}
+
+.detail-visual {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 16 / 10;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f3f4f6;
+  margin-bottom: 16px;
 }
 
 .profile-card-actions {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-top: 18px;
 }
 
-.profile-detail {
-  h4 {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 16px 0 8px 0;
-  }
-
-  .weights-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-
-    .weight-item {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-
-      .weight-label {
-        font-size: 13px;
-        color: var(--text-secondary);
-      }
-    }
-  }
-
-  p {
-    margin: 0;
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.6;
-  }
+.weights-grid {
+  display: grid;
+  gap: 12px;
 }
 
-:deep(.el-descriptions__label) {
+.weight-item {
+  display: grid;
+  gap: 6px;
+}
+
+.weight-label {
+  color: #374151;
   font-weight: 500;
 }
+
 </style>
