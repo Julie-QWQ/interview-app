@@ -66,7 +66,18 @@ interview-service/
 
 ## Quick Start
 
-### 1. Configure backend env
+### 1. Configure backend
+
+后端配置分两层：
+
+- `backend/.env`
+  - 放密钥、密码、供应商凭证等敏感信息
+- `backend/config/config.yaml`
+  - 放非敏感运行配置，例如服务端口、数据库主机名、日志、语音、数字人、ASR 和业务默认参数
+
+两者缺一不可：`.env` 负责 secrets，`config.yaml` 负责主配置结构。
+
+#### 1.1 Configure `backend/.env`
 
 复制环境变量模板：
 
@@ -97,6 +108,28 @@ cp backend/.env.example backend/.env
 
 - 如果直接使用仓库内 `docker-compose.yml` 启动数据库，默认 PostgreSQL 密码是 `postgres`，那么 `backend/.env` 里的 `DB_PASSWORD` 也应保持一致。
 - 讯飞数字人签名依赖本机时间，系统时间不准会导致 WebSocket 握手失败。
+
+#### 1.2 Review `backend/config/config.yaml`
+
+首次启动前建议至少检查这些配置项是否符合你的本地环境：
+
+- `app`
+  - 服务名、调试模式、监听地址和端口
+- `database`
+  - 主机、端口、数据库名、用户名
+  - 其中密码通常从 `.env` 的 `DB_PASSWORD` 注入
+- `ai`
+  - 模型名、Base URL、超时、流式行为
+- `asr`
+  - 是否启用、模型、Base URL、降级模型
+- `digital_human`
+  - 采样率、默认数字人参数
+- `voice`
+  - TTS 音色、分段播报相关配置
+- `logging`
+  - 日志级别和格式
+
+如果你改了数据库主机、后端端口、AI/ASR 提供商地址，优先检查这里，而不是只改 `.env`。
 
 ### 2. Configure frontend env
 
