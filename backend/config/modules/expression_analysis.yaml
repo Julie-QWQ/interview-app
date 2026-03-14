@@ -1,0 +1,11 @@
+expression_analysis:
+  enabled: true
+  video_sample_interval_ms: 1500
+  audio_min_segments: 1
+  video_min_windows: 2
+  minimum_confidence_samples: 3
+  weights:
+    fluency: 0.3
+    clarity: 0.25
+    confidence: 0.25
+    composure: 0.2

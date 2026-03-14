@@ -96,9 +96,16 @@ cp backend/.env.example backend/.env
 - `AI_API_KEY`
 - `DB_PASSWORD`
 
-可选配置：
+可选配置（ASR 服务选择一个）：
 
-- `ASR_API_KEY`
+- `SILICONFLOW_API_KEY` - SiliconFlow ASR（免费，当前默认）
+- `ALIBABA_ASR_API_KEY` / `ALIBABA_ASR_API_SECRET` / `ALIBABA_ASR_APP_KEY` - 阿里云（推荐，准确率高）
+- `XUNFEI_ASR_API_KEY` / `XUNFEI_ASR_API_SECRET` / `XUNFEI_ASR_APP_ID` - 讯飞（中文最佳）
+- `WHISPER_API_KEY` - Whisper API（多语言）
+- `AZURE_SPEECH_KEY` - Azure Speech
+
+数字人配置：
+
 - `XUNFEI_APP_ID`
 - `XUNFEI_API_KEY`
 - `XUNFEI_API_SECRET`
@@ -121,7 +128,10 @@ cp backend/.env.example backend/.env
 - `ai`
   - 模型名、Base URL、超时、流式行为
 - `asr`
-  - 是否启用、模型、Base URL、降级模型
+  - **重要**: 选择 ASR 服务提供商（当前默认 SiliconFlow）
+  - 切换到阿里云: 将 `<<: *siliconflow_asr` 改为 `<<: *alibaba_asr`
+  - 切换到讯飞: 将 `<<: *siliconflow_asr` 改为 `<<: *xunfei_asr`
+  - 详见: [ASR 配置指南](docs/asr_quick_setup.md)
 - `digital_human`
   - 采样率、默认数字人参数
 - `voice`

@@ -10,10 +10,11 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0', // 监听所有网络接口，支持局域网访问
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://10.179.224.182:8001', // 修改为实际的后端地址
         changeOrigin: true
       }
     }

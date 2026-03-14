@@ -1,0 +1,25 @@
+voice:
+  enabled: true
+  always_on_enabled: true
+  noise_floor_sample_ms: 800
+  speech_start_threshold: 1.6
+  min_speech_ms: 220
+  end_silence_ms: 1500
+  max_segment_ms: 15000
+  pre_roll_ms: 300
+  barge_in_ms: 250
+  chunk_retention_ms: 20000
+  min_threshold: 0.0015
+  timeslice_ms: 100
+  auto_send_min_chars: 8
+  typing_grace_ms: 1200
+  short_noise_words:
+  - 嗯
+  - 啊
+  - 哦
+  - 额
+  - 呃
+  - 唉
+  - 哈
+  - 噢
+  tts_voice: male

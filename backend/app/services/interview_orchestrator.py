@@ -509,6 +509,394 @@ class SmartReplyEngineAdapter(ExternalToolAdapter):
         )
 
 
+class QuestionBankAdapter(ExternalToolAdapter):
+    """Simplified Question Bank adapter for RAG service integration."""
+
+    tool_name = "question_bank"
+    supported_stages = {
+        "technical_questions",
+        "behavioral_questions",
+        "project_discussion",
+        "scenario_analysis",
+    }
+    supported_triggers = {
+        "stage_enter",
+        "user_message",
+        "interview_end",
+    }
+    default_ttl_seconds = 600
+
+    def build_context_key(self, context: ToolExecutionContext) -> str:
+        interview = context.interview_config or {}
+        position = interview.get("position", "general")
+        difficulty = interview.get("difficulty_level", "3")
+        return f"questions:{context.stage}:{position}:{difficulty}"
+
+    def build_params(self, context: ToolExecutionContext) -> Dict[str, Any]:
+        interview = context.interview_config or {}
+
+        # Map position
+        position_map = {
+            "java": "java_backend",
+            "java_backend": "java_backend",
+            "frontend": "web_frontend",
+            "web": "web_frontend",
+            "algorithm": "algorithm",
+        }
+        position = interview.get("position", "java_backend")
+        mapped_position = position_map.get(position.lower(), "java_backend")
+
+        params = {"position": mapped_position}
+
+        # Map stage to question type
+        stage_type_map = {
+            "technical_questions": "technical",
+            "behavioral_questions": "behavioral",
+            "project_discussion": "project",
+            "scenario_analysis": "scenario",
+        }
+        if context.stage in stage_type_map:
+            params["type"] = stage_type_map[context.stage]
+
+        # Add difficulty
+        difficulty = interview.get("difficulty_level")
+        if difficulty:
+            try:
+                params["difficulty"] = int(difficulty)
+            except (ValueError, TypeError):
+                params["difficulty"] = 3
+
+        # Add skills/tags
+        skills = interview.get("skills") or []
+        if skills:
+            if isinstance(skills, list):
+                params["tags"] = ",".join(str(s) for s in skills)
+            else:
+                params["tags"] = str(skills)
+
+        return params
+
+    def build_request(self, context: ToolExecutionContext) -> Dict[str, Any]:
+        """Build request for question bank service."""
+        base_url = self._provider_config().get("url", "http://localhost:8004/api")
+
+        if context.trigger == "stage_enter":
+            # Question search
+            params = self.build_params(context)
+            params["size"] = params.get("size", 5)
+
+            if context.current_user_message:
+                params["query"] = context.current_user_message[:200]
+
+            return {
+                "method": "GET",
+                "url": f"{base_url}/question/search",
+                "params": params,
+            }
+        elif context.trigger == "user_message":
+            # Follow-up hints (extract question ID from conversation)
+            last_qid = self._extract_last_question_id(context)
+            if last_qid:
+                return {
+                    "method": "GET",
+                    "url": f"{base_url}/question/{last_qid}/followup",
+                    "params": {},
+                }
+        elif context.trigger == "interview_end":
+            # Feedback submission
+            return {
+                "method": "POST",
+                "url": f"{base_url}/question/feedback",
+                "body": self._build_feedback_body(context),
+            }
+
+        return {"method": "GET", "url": f"{base_url}/question/search", "params": {}}
+
+    def _extract_last_question_id(self, context: ToolExecutionContext) -> Optional[int]:
+        """Extract last question ID from conversation."""
+        for msg in reversed(context.conversation_slice):
+            if msg.get("role") == "assistant":
+                metadata = msg.get("metadata") or {}
+                qid = metadata.get("question_id")
+                if qid:
+                    try:
+                        return int(qid)
+                    except (ValueError, TypeError):
+                        pass
+        return None
+
+    def _build_feedback_body(self, context: ToolExecutionContext) -> Dict[str, Any]:
+        """Build feedback submission body."""
+        interview = context.interview_config or {}
+        scores = {}
+
+        if context.progress_info:
+            assessments = context.progress_info.get("assessments") or []
+            if assessments:
+                last_assessment = assessments[-1]
+                scores = {
+                    "question_id": last_assessment.get("question_id"),
+                    "score": last_assessment.get("score", 5),
+                }
+
+        return {
+            "userId": interview.get("user_id") or interview.get("candidate_id"),
+            "questionId": scores.get("question_id"),
+            "interviewId": str(context.interview_id),
+            "score": scores.get("score"),
+        }
+
+    def call(self, payload: Dict[str, Any], *, timeout_seconds: float) -> ToolResult:
+        """Execute API call to question bank service."""
+        try:
+            method = payload.get("method", "GET")
+            url = payload.get("url", "")
+            params = payload.get("params", {})
+            body = payload.get("body")
+
+            headers = {"Content-Type": "application/json"}
+            headers.update(self._provider_config().get("headers") or {})
+
+            start_time = time.perf_counter()
+
+            if method == "GET":
+                response = requests.get(url, params=params, headers=headers, timeout=timeout_seconds)
+            elif method == "POST":
+                response = requests.post(url, json=body, headers=headers, timeout=timeout_seconds)
+            else:
+                return ToolResult(status="error", errors=[f"Unsupported method: {method}"])
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            response.raise_for_status()
+
+            return self._parse_response(response.json(), latency_ms)
+
+        except requests.exceptions.Timeout:
+            return ToolResult(status="timeout", errors=["Request timeout"])
+        except Exception as e:
+            return ToolResult(status="error", errors=[str(e)])
+
+    def _parse_response(self, body: Dict[str, Any], latency_ms: int) -> ToolResult:
+        """Parse question bank service response."""
+        code = body.get("code", 500)
+        data = body.get("data")
+
+        if code != 200:
+            return ToolResult(
+                status="error",
+                errors=[f"Error {code}: {body.get('message', '')}"],
+                raw_response=body,
+            )
+
+        # Handle question list
+        if isinstance(data, list) and data:
+            if "text" in data[0]:  # Questions
+                return self._parse_questions(data, latency_ms)
+            elif "content" in data[0]:  # Knowledge documents
+                return self._parse_documents(data, latency_ms)
+
+        # Handle follow-up hints
+        if isinstance(data, dict) and "followUpHints" in data:
+            return self._parse_followup(data, latency_ms)
+
+        return ToolResult(status="success", summary="Request completed")
+
+    def _parse_questions(self, questions: List[Dict], latency_ms: int) -> ToolResult:
+        """Parse question list response."""
+        if not questions:
+            return ToolResult(status="success", summary="No questions found")
+
+        summaries = [f"- Q{q.get('id')}: {q.get('text', 'N/A')[:60]}..." for q in questions[:3]]
+        summary = f"Retrieved {len(questions)} questions:\n" + "\n".join(summaries)
+
+        # Build prompt context
+        context_parts = ["Available Questions:\n"]
+        for i, q in enumerate(questions[:10], 1):
+            context_parts.append(
+                f"{i}. [{q.get('code', 'N/A')}] {q.get('text', 'N/A')}\n"
+                f"   Difficulty: {q.get('difficulty', 'N/A')}\n"
+                f"   Tags: {', '.join(q.get('tags') or [])}\n"
+            )
+
+        return ToolResult(
+            status="success",
+            summary=summary,
+            structured_payload={"questions": questions, "count": len(questions)},
+            prompt_context="\n".join(context_parts),
+            meta={"latency_ms": latency_ms, "question_count": len(questions)},
+        )
+
+    def _parse_followup(self, data: Dict[str, Any], latency_ms: int) -> ToolResult:
+        """Parse follow-up hints response."""
+        hints = data.get("followUpHints") or []
+        if not hints:
+            return ToolResult(status="success", summary="No follow-up hints available")
+
+        summary = "Follow-up suggestions:\n" + "\n".join(f"- {h}" for h in hints[:5])
+        context = "Suggested Follow-up Questions:\n" + "\n".join(f"- {h}" for h in hints)
+
+        return ToolResult(
+            status="success",
+            summary=summary,
+            structured_payload={"hints": hints},
+            prompt_context=context,
+            meta={"latency_ms": latency_ms, "hint_count": len(hints)},
+        )
+
+    def _parse_documents(self, documents: List[Dict], latency_ms: int) -> ToolResult:
+        """Parse knowledge documents response."""
+        if not documents:
+            return ToolResult(status="success", summary="No documents found")
+
+        summaries = [f"- {doc.get('title', 'Untitled')} (tags: {', '.join(doc.get('tags') or [])})" for doc in documents[:3]]
+        summary = f"RAG retrieved {len(documents)} documents:\n" + "\n".join(summaries)
+
+        # Build knowledge context
+        context_parts = ["Relevant Knowledge:\n"]
+        for i, doc in enumerate(documents[:5], 1):
+            context_parts.append(
+                f"Document {i}: {doc.get('title', 'Untitled')}\n"
+                f"Tags: {', '.join(doc.get('tags') or [])}\n"
+                f"Content:\n{doc.get('content', '')[:1000]}...\n"
+            )
+
+        return ToolResult(
+            status="success",
+            summary=summary,
+            structured_payload={"documents": documents, "doc_count": len(documents)},
+            prompt_context="\n".join(context_parts),
+            meta={"latency_ms": latency_ms, "doc_count": len(documents)},
+        )
+
+
+class LearningResourceAdapter(ExternalToolAdapter):
+    """学习资源推荐适配器 - 新版API v1.1支持."""
+
+    tool_name = "learning_resource"
+    supported_stages = {"interview_end", "growth_recommendation"}
+    supported_triggers = {"interview_end", "user_request"}
+    default_ttl_seconds = 3600  # 学习资源缓存1小时
+
+    def build_context_key(self, context: ToolExecutionContext) -> str:
+        interview = context.interview_config or {}
+        user_id = interview.get("user_id", interview.get("candidate_id", "unknown"))
+        position = interview.get("position", "java_backend")
+        skills = interview.get("skills", [])
+        return f"resources:{user_id}:{position}:{','.join(skills)}"
+
+    def build_params(self, context: ToolExecutionContext) -> Dict[str, Any]:
+        interview = context.interview_config or {}
+
+        # 岗位枚举映射
+        position_map = {
+            "java": "java_backend",
+            "java_backend": "java_backend",
+            "frontend": "web_frontend",
+            "web": "web_frontend",
+            "algorithm": "algorithm",
+        }
+        position = interview.get("position", "java_backend")
+        mapped_position = position_map.get(position.lower(), "java_backend")
+
+        params = {"position": mapped_position}  # 新版API: 必填参数
+
+        # 用户ID（优先按薄弱技能推荐）
+        user_id = interview.get("user_id", interview.get("candidate_id"))
+        if user_id:
+            params["userId"] = user_id
+
+        # 技能标签（userId无薄弱技能时生效）
+        skills = interview.get("skills") or []
+        if skills:
+            if isinstance(skills, list):
+                params["tags"] = ",".join(str(s) for s in skills)
+            else:
+                params["tags"] = str(skills)
+
+        # 资源类型（可选）
+        resource_type = context.progress_info.get("resource_type") if context.progress_info else None
+        if resource_type:
+            params["type"] = resource_type
+
+        return params
+
+    def build_request(self, context: ToolExecutionContext) -> Dict[str, Any]:
+        base_url = self._provider_config().get("url", "http://localhost:8004")
+        params = self.build_params(context)
+
+        return {
+            "method": "GET",
+            "url": f"{base_url}/api/resource/recommend",
+            "params": params,
+        }
+
+    def call(self, payload: Dict[str, Any], *, timeout_seconds: float) -> ToolResult:
+        """执行学习资源推荐请求."""
+        try:
+            method = payload.get("method", "GET")
+            url = payload.get("url", "")
+            params = payload.get("params", {})
+
+            headers = {"Content-Type": "application/json"}
+            headers.update(self._provider_config().get("headers") or {})
+
+            start_time = time.perf_counter()
+
+            if method == "GET":
+                response = requests.get(url, params=params, headers=headers, timeout=timeout_seconds)
+            else:
+                return ToolResult(status="error", errors=[f"Unsupported method: {method}"])
+
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            response.raise_for_status()
+
+            return self._parse_response(response.json(), latency_ms)
+
+        except requests.exceptions.Timeout:
+            return ToolResult(status="timeout", errors=["Request timeout"])
+        except Exception as e:
+            return ToolResult(status="error", errors=[str(e)])
+
+    def _parse_response(self, body: Dict[str, Any], latency_ms: int) -> ToolResult:
+        """解析学习资源推荐响应."""
+        code = body.get("code", 500)
+        data = body.get("data")
+
+        if code != 200:
+            return ToolResult(
+                status="error",
+                errors=[f"Error {code}: {body.get('message', '')}"],
+                raw_response=body,
+            )
+
+        resources = data if isinstance(data, list) else []
+        if not resources:
+            return ToolResult(status="success", summary="No learning resources found")
+
+        summaries = [f"- {r.get('title', 'Untitled')} ({r.get('type', 'resource')})" for r in resources[:3]]
+        summary = f"Found {len(resources)} learning resources:\n" + "\n".join(summaries)
+
+        # 构建推荐上下文
+        context_parts = ["Recommended Learning Resources:\n"]
+        for i, res in enumerate(resources[:10], 1):
+            context_parts.append(
+                f"{i}. {res.get('title', 'Untitled')}\n"
+                f"   Type: {res.get('type', 'N/A')}\n"
+                f"   Platform: {res.get('platform', 'N/A')}\n"
+                f"   Difficulty: {res.get('difficulty', 'N/A')}/5\n"
+                f"   Description: {res.get('description', 'N/A')[:100]}...\n"
+                f"   URL: {res.get('url', 'N/A')}\n"
+            )
+
+        return ToolResult(
+            status="success",
+            summary=summary,
+            structured_payload={"resources": resources, "count": len(resources)},
+            prompt_context="\n".join(context_parts),
+            meta={"latency_ms": latency_ms, "resource_count": len(resources)},
+        )
+
+
 class GenericToolAdapter(ExternalToolAdapter):
     """Fallback adapter for providers configured from the frontend."""
 
@@ -520,11 +908,16 @@ class GenericToolAdapter(ExternalToolAdapter):
 class ToolRegistry:
     def __init__(self, settings):
         self.settings = settings
+        # 延迟导入避免循环依赖
+        from app.services.resume_analyzer_adapter import ResumeAnalyzerAdapter
+
         self._adapters = {
             "resume_analyzer": ResumeAnalyzerAdapter(settings),
             "question_bank_retriever": QuestionBankRetrieverAdapter(settings),
+            "question_bank": QuestionBankAdapter(settings),  # Built-in RAG adapter
             "followup_engine": FollowupEngineAdapter(settings),
             "smart_reply_engine": SmartReplyEngineAdapter(settings),
+            "learning_resource": LearningResourceAdapter(settings),  # 新版API学习资源推荐
         }
 
     def _tools_config(self) -> Dict[str, Any]:
@@ -540,8 +933,29 @@ class ToolRegistry:
             "technical": StageToolPolicy(
                 "technical",
                 {
-                    "stage_enter": ["question_bank_retriever"],
-                    "user_turn": ["question_bank_retriever", "followup_engine", "smart_reply_engine"],
+                    "stage_enter": ["question_bank"],  # Use new RAG-based adapter
+                    "user_turn": ["question_bank", "followup_engine", "smart_reply_engine"],
+                },
+            ),
+            "behavioral": StageToolPolicy(
+                "behavioral",
+                {
+                    "stage_enter": ["question_bank"],
+                    "user_turn": ["question_bank", "followup_engine", "smart_reply_engine"],
+                },
+            ),
+            "project_discussion": StageToolPolicy(
+                "project_discussion",
+                {
+                    "stage_enter": ["question_bank"],
+                    "user_turn": ["question_bank", "followup_engine", "smart_reply_engine"],
+                },
+            ),
+            "scenario_analysis": StageToolPolicy(
+                "scenario_analysis",
+                {
+                    "stage_enter": ["question_bank"],
+                    "user_turn": ["question_bank", "followup_engine", "smart_reply_engine"],
                 },
             ),
             "scenario": StageToolPolicy(

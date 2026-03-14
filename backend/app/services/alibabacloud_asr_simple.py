@@ -1,0 +1,258 @@
+"""
+阿里云ASR服务 - 一句话识别RESTful API
+基于官方文档: https://help.aliyun.com/zh/isi/developer-reference/restful-api-2
+
+使用RESTful API实现实时语音识别（同步返回，适合面试场景）
+"""
+import logging
+import os
+import requests
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+class AlibabaCloudASR:
+    """阿里云语音识别服务 - 一句话识别API（实时同步）"""
+
+    def __init__(
+        self,
+        app_key: str,
+        token: str,
+        region: str = "cn-shanghai",
+    ):
+        """
+        初始化阿里云ASR
+
+        Args:
+            app_key: 智能语音项目AppKey
+            token: 服务鉴权Token
+            region: 地域（cn-shanghai/cn-beijing/cn-shenzhen）
+        """
+        self.app_key = app_key
+        self.token = token
+        self.region = region
+
+        # API端点映射
+        gateway_map = {
+            "cn-shanghai": "nls-gateway-cn-shanghai.aliyuncs.com",
+            "cn-beijing": "nls-gateway-cn-beijing.aliyuncs.com",
+            "cn-shenzhen": "nls-gateway-cn-shenzhen.aliyuncs.com",
+        }
+        self.host = gateway_map.get(region, gateway_map["cn-shanghai"])
+        self.base_url = f"https://{self.host}/stream/v1/asr"
+
+        logger.info(f"阿里云ASR初始化成功: region={region}, host={self.host}")
+
+    def transcribe_audio_file(
+        self,
+        audio_data: bytes,
+        format: str = "wav",
+        sample_rate: int = 16000,
+        enable_punctuation: bool = True,
+        enable_inverse_text_normalization: bool = True,
+        enable_voice_detection: bool = False,
+    ) -> str:
+        """
+        识别音频文件（一句话识别API - 同步返回）
+
+        Args:
+            audio_data: 音频二进制数据
+            format: 音频格式（wav/pcm/mp3/aac等）
+            sample_rate: 采样率（8000/16000）
+            enable_punctuation: 是否添加标点
+            enable_inverse_text_normalization: 是否数字规范化
+            enable_voice_detection: 是否人声检测
+
+        Returns:
+            识别结果文本
+
+        Raises:
+            Exception: 识别失败时抛出异常
+        """
+        # 验证关键参数
+        if not self.app_key:
+            raise Exception("app_key is empty or not configured")
+
+        if not self.token:
+            raise Exception("token is empty or not configured")
+
+        try:
+            # 构建URL参数
+            params = {
+                "appkey": self.app_key,
+                "format": format,
+                "sample_rate": sample_rate,
+            }
+
+            # 可选参数
+            if enable_punctuation:
+                params["enable_punctuation_prediction"] = "true"
+            if enable_inverse_text_normalization:
+                params["enable_inverse_text_normalization"] = "true"
+            if enable_voice_detection:
+                params["enable_voice_detection"] = "true"
+
+            # 请求头
+            headers = {
+                "X-NLS-Token": self.token,
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(audio_data)),
+                "Host": self.host,
+            }
+
+            logger.info(
+                f"发送阿里云ASR请求: size={len(audio_data)} bytes, "
+                f"format={format}, sample_rate={sample_rate}, "
+                f"enable_punctuation={enable_punctuation}"
+            )
+
+            # 发送HTTPS POST请求
+            response = requests.post(
+                self.base_url,
+                params=params,
+                headers=headers,
+                data=audio_data,
+                timeout=(5, 10),  # (连接超时, 读取超时)
+            )
+
+            # 处理响应
+            if response.status_code != 200:
+                raise Exception(
+                    f"阿里云ASR HTTP错误: {response.status_code} - {response.text}"
+                )
+
+            result = response.json()
+            status = result.get("status")
+            message = result.get("message", "")
+            task_id = result.get("task_id", "")
+
+            logger.debug(
+                f"阿里云ASR响应: task_id={task_id}, status={status}, message={message}"
+            )
+
+            # 判断识别状态
+            if status == 20000000:  # 成功
+                text = result.get("result", "").strip()
+                logger.info(
+                    f"阿里云ASR转录成功: text_length={len(text)}, "
+                    f"preview={text[:50] if text else '(empty)'}"
+                )
+                return text
+            else:
+                # 状态码错误处理
+                error_messages = {
+                    40000001: "身份认证失败（Token无效或过期）",
+                    40000002: "无效的消息",
+                    40000003: "无效的参数",
+                    40000004: "空闲超时",
+                    40000005: "请求数量过多",
+                    40000010: "新用户免费试用已到期",
+                    41010101: "不支持的采样率",
+                    50000000: "服务端错误",
+                    50000001: "内部GRPC调用错误",
+                }
+                error_desc = error_messages.get(status, f"未知错误码: {status}")
+                raise Exception(
+                    f"阿里云ASR识别失败: {error_desc} (status={status}, message={message})"
+                )
+
+        except requests.exceptions.Timeout:
+            logger.error("阿里云ASR请求超时")
+            raise Exception("阿里云ASR请求超时")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"阿里云ASR网络错误: {e}")
+            raise Exception(f"阿里云ASR网络错误: {e}")
+        except Exception as e:
+            logger.error(f"阿里云ASR转录失败: {e}", exc_info=True)
+            raise
+
+
+class AlibabaASRService:
+    """兼容旧接口的包装类"""
+
+    def __init__(
+        self,
+        api_key: str,  # 不再使用，保留兼容性
+        api_secret: str,  # 不再使用，保留兼容性
+        app_key: str,
+        base_url: str = "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr",
+        model: str = "paraformer-v2",
+        language: str = "zh-CN",
+        format: str = "wav",
+        sample_rate: int = 16000,
+        enable_punctuation: bool = True,
+        enable_inverse_text_normalization: bool = True,
+        enable_voice_detection: bool = False,
+        token: str = "",
+    ):
+        """
+        初始化阿里云ASR服务
+
+        Args:
+            api_key: 已废弃（保留兼容性）
+            api_secret: 已废弃（保留兼容性）
+            app_key: 智能语音项目AppKey
+            base_url: API地址
+            model: 模型名称（仅日志使用）
+            language: 语言（仅日志使用）
+            format: 音频格式
+            sample_rate: 采样率
+            enable_punctuation: 是否添加标点
+            enable_inverse_text_normalization: 是否数字规范化
+            enable_voice_detection: 是否人声检测
+            token: 服务鉴权Token
+        """
+        # 从base_url提取region
+        region = "cn-shanghai"
+        if "cn-beijing" in base_url:
+            region = "cn-beijing"
+        elif "cn-shenzhen" in base_url:
+            region = "cn-shenzhen"
+
+        # 优先使用参数传入的token，否则从环境变量读取
+        env_token = os.environ.get("ALIBABA_ASR_TOKEN", "")
+        token = token or env_token
+
+        if not token:
+            logger.warning(
+                "未设置 ALIBABA_ASR_TOKEN 环境变量，"
+                "请访问 https://nls-portal.console.aliyun.com/ 获取Token"
+            )
+
+        self.client = AlibabaCloudASR(
+            app_key=app_key,
+            token=token,
+            region=region,
+        )
+
+        self.format = format
+        self.sample_rate = sample_rate
+        self.enable_punctuation = enable_punctuation
+        self.enable_inverse_text_normalization = enable_inverse_text_normalization
+        self.enable_voice_detection = enable_voice_detection
+
+        logger.info(
+            f"阿里云ASR initialized: model={model}, language={language}, "
+            f"sample_rate={sample_rate}, region={region}"
+        )
+
+    def transcribe(self, audio_data: bytes, format: str = "wav") -> str:
+        """
+        识别音频
+
+        Args:
+            audio_data: 音频二进制数据
+            format: 音频格式（覆盖初始化设置）
+
+        Returns:
+            识别结果文本
+        """
+        return self.client.transcribe_audio_file(
+            audio_data=audio_data,
+            format=format or self.format,
+            sample_rate=self.sample_rate,
+            enable_punctuation=self.enable_punctuation,
+            enable_inverse_text_normalization=self.enable_inverse_text_normalization,
+            enable_voice_detection=self.enable_voice_detection,
+        )

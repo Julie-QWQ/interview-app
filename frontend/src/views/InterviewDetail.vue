@@ -1177,6 +1177,16 @@ async function handleComplete() {
       }
     }
 
+    // 关闭数字人
+    if (digitalAvatarRef.value) {
+      try {
+        await digitalAvatarRef.value.destroy()
+        console.log('数字人已关闭')
+      } catch (error) {
+        console.error('关闭数字人失败', error)
+      }
+    }
+
     await interviewStore.completeInterview(interviewId.value)
     ElMessage.success('面试已完成')
     await loadInterviewDetail()

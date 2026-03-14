@@ -295,28 +295,67 @@ async function normalizeAudioForUpload(audioBlob: Blob | null | undefined): Prom
     size: audioBlob?.size,
     mimeType
   })
-  if (mimeType.includes('wav')) {
-    return {
-      blob: audioBlob!,
-      filename: 'audio.wav'
-    }
+
+  if (!audioBlob || audioBlob.size === 0) {
+    throw new Error('音频数据为空')
   }
 
   try {
-    const wavBlob = await convertAudioBlobToWav(audioBlob!)
-    asrDebug('normalizeAudioForUpload: converted to wav', {
-      size: wavBlob.size,
-      mimeType: wavBlob.type
+    // 使用高级音频处理提高ASR准确率
+    const { processAudioForASR } = await import('./audioProcessor')
+    asrDebug('Attempting to import processAudioForASR...')
+
+    const processedBlob = await processAudioForASR(audioBlob, {
+      noiseReduction: true,      // 启用降噪
+      normalizeVolume: true,     // 启用音量归一化
+      highPassFilter: true,      // 启用高通滤波
+      targetSampleRate: 16000    // ASR最佳采样率
     })
+
+    asrDebug('Audio processing succeeded')
+
+    asrDebug('normalizeAudioForUpload: processed audio', {
+      originalSize: audioBlob.size,
+      processedSize: processedBlob.size,
+      mimeType: processedBlob.type
+    })
+
     return {
-      blob: wavBlob,
+      blob: processedBlob,
       filename: 'audio.wav'
     }
   } catch (error) {
-    console.warn('音频转 WAV 失败，回退为原始格式上传:', error)
-    return {
-      blob: audioBlob!,
-      filename: getFilenameForBlob(audioBlob)
+    console.warn('高级音频处理失败,使用基础转换:', error)
+    asrDebug('Audio processing failed, falling back to basic conversion', error)
+
+    // 回退到基础转换
+    if (mimeType.includes('wav')) {
+      asrDebug('Using original WAV audio directly')
+      return {
+        blob: audioBlob,
+        filename: 'audio.wav'
+      }
+    }
+
+    // 如果不是WAV格式，尝试基础转换
+    asrDebug('Converting non-WAV audio to WAV format')
+
+    try {
+      const wavBlob = await convertAudioBlobToWav(audioBlob)
+      asrDebug('normalizeAudioForUpload: converted to wav', {
+        size: wavBlob.size,
+        mimeType: wavBlob.type
+      })
+      return {
+        blob: wavBlob,
+        filename: 'audio.wav'
+      }
+    } catch (fallbackError) {
+      console.warn('音频转 WAV 失败，回退为原始格式上传:', fallbackError)
+      return {
+        blob: audioBlob,
+        filename: getFilenameForBlob(audioBlob)
+      }
     }
   }
 }

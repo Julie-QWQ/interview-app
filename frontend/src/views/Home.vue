@@ -409,6 +409,16 @@ function viewDetail(id) {
   &:last-child {
     margin-bottom: 0;
   }
+
+  &.external-test-link {
+    border-color: #67c23a;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+
+    &:hover {
+      border-color: #85ce61;
+      background: linear-gradient(135deg, #e6f7ff 0%, #d6f4ff 100%);
+    }
+  }
 }
 
 @media (max-width: 992px) {

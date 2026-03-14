@@ -270,7 +270,38 @@ class AIService:
         stage_config = progress_manager.get_stage_info(stage)
         progress_info = progress_manager.calculate_progress(current_turn, stage)
         trace_id = trace_id or get_interview_orchestrator().new_trace_id()
-        trigger = "stage_enter" if previous_stage and previous_stage != stage else "user_turn"
+
+        # Determine trigger: stage_exit, stage_enter, or user_turn
+        if previous_stage and previous_stage != stage:
+            # Stage transition: trigger stage_exit for previous stage and stage_enter for new stage
+            # First, handle stage_exit for the previous stage
+            if previous_stage:
+                stage_exit_context = self._build_orchestration_context(
+                    interview_config=interview_config,
+                    conversation_history=conversation_history,
+                    stage=previous_stage,
+                    trigger="stage_exit",
+                    progress_info=progress_info,
+                    trace_id=trace_id,
+                )
+                # Execute stage_exit tools (fire and forget, don't wait for completion)
+                get_interview_orchestrator().orchestrate(stage_exit_context)
+
+                # Trigger expression analysis independently (not as a tool)
+                interview_id = interview_config.get("interview_id")
+                if interview_id:
+                    import asyncio
+                    from app.services.expression_analyzer_service import get_expression_analyzer_service
+
+                    analyzer = get_expression_analyzer_service()
+                    # Async task to generate and save report
+                    asyncio.create_task(analyzer.generate_and_save_report(interview_id, previous_stage))
+
+            # Then use stage_enter for the current stage
+            trigger = "stage_enter"
+        else:
+            # Same stage, normal user turn
+            trigger = "user_turn"
 
         orchestration_context = self._build_orchestration_context(
             interview_config=interview_config,
@@ -325,7 +356,38 @@ class AIService:
         stage_config = progress_manager.get_stage_info(stage)
         progress_info = progress_manager.calculate_progress(current_turn, stage)
         trace_id = trace_id or get_interview_orchestrator().new_trace_id()
-        trigger = "stage_enter" if previous_stage and previous_stage != stage else "user_turn"
+
+        # Determine trigger: stage_exit, stage_enter, or user_turn
+        if previous_stage and previous_stage != stage:
+            # Stage transition: trigger stage_exit for previous stage and stage_enter for new stage
+            # First, handle stage_exit for the previous stage
+            if previous_stage:
+                stage_exit_context = self._build_orchestration_context(
+                    interview_config=interview_config,
+                    conversation_history=conversation_history,
+                    stage=previous_stage,
+                    trigger="stage_exit",
+                    progress_info=progress_info,
+                    trace_id=trace_id,
+                )
+                # Execute stage_exit tools (fire and forget, don't wait for completion)
+                get_interview_orchestrator().orchestrate(stage_exit_context)
+
+                # Trigger expression analysis independently (not as a tool)
+                interview_id = interview_config.get("interview_id")
+                if interview_id:
+                    import asyncio
+                    from app.services.expression_analyzer_service import get_expression_analyzer_service
+
+                    analyzer = get_expression_analyzer_service()
+                    # Async task to generate and save report
+                    asyncio.create_task(analyzer.generate_and_save_report(interview_id, previous_stage))
+
+            # Then use stage_enter for the current stage
+            trigger = "stage_enter"
+        else:
+            # Same stage, normal user turn
+            trigger = "user_turn"
 
         orchestration_context = self._build_orchestration_context(
             interview_config=interview_config,

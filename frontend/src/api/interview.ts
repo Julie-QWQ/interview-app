@@ -93,7 +93,7 @@ export const interviewApi = {
       recommendation: string
     }
   }> {
-    return api.post(`/interviews/${id}/complete`)
+    return api.post(`/interviews/${id}/complete`, {}, { timeout: 60000 }) // 增加到60秒
   },
 
   /**

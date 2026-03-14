@@ -308,3 +308,7 @@ def get_smart_reply_service() -> SmartReplyService:
     if _smart_reply_service is None:
         _smart_reply_service = SmartReplyService()
     return _smart_reply_service
+
+
+# Module-level convenience instance for direct import
+smart_reply_service = get_smart_reply_service()

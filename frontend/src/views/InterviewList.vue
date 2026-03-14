@@ -90,7 +90,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useInterviewStore } from '@/stores/interview'
 
@@ -126,8 +126,28 @@ function viewDetail(id) {
   router.push(`/interviews/${id}`)
 }
 
-function viewReport(id) {
-  router.push(`/interviews/${id}/report`)
+async function viewReport(id) {
+  try {
+    // 弹出输入框让用户输入URL
+    const { value } = await ElMessageBox.prompt(
+      '请输入评估报告页面的URL地址（例如：http://localhost:8002/report/123）',
+      '跳转到评估报告',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPattern: /^(https?:\/\/)?[\w\-]+(\.[\w\-]+)+[/#?]?.*$/,
+        inputErrorMessage: '请输入有效的URL地址',
+        inputValue: `http://localhost:8002/report/${id}`, // 默认值
+      }
+    )
+
+    if (value) {
+      // 跳转到用户输入的URL
+      window.open(value, '_blank')
+    }
+  } catch {
+    // 用户取消了操作
+  }
 }
 
 async function handleDelete(id) {

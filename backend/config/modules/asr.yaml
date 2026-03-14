@@ -1,0 +1,22 @@
+# ==========================================
+# 阿里云智能语音 ASR 
+# ==========================================
+
+asr:
+  app_key: "${ALIBABA_ASR_APP_KEY:}"
+  token: "${ALIBABA_ASR_TOKEN:}"
+  base_url: "https://nls-gateway-cn-shanghai.aliyuncs.com/stream/v1/asr"
+
+  # 模型配置
+  model: "paraformer-v2"  # 最新模型,中英混合识别最准确
+  language: "zh-CN"       # 自动支持中英混合
+  format: "wav"
+  sample_rate: 16000      # 前端已设置16kHz
+
+  # 高级选项
+  enable_punctuation: true                   # 自动添加标点
+  enable_inverse_text_normalization: true    # 数字规范化 ("120" 而非 "一百二十")
+  enable_voice_detection: false              # 人声检测（实时场景建议关闭）
+
+  enabled: true
+

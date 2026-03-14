@@ -1,6 +1,9 @@
 """
 ASR service adapters.
 """
+import base64
+import hashlib
+import hmac
 import logging
 import os
 import tempfile
@@ -137,6 +140,9 @@ class SiliconFlowASRService(ASRService):
                 os.remove(temp_path)
 
 
+# 从简化版导入阿里云ASR
+from app.services.alibabacloud_asr_simple import AlibabaASRService
+
 class OpenAIASRService(ASRService):
     """OpenAI-compatible ASR service."""
 
@@ -183,14 +189,20 @@ _asr_service: Optional[ASRService] = None
 def init_asr_service(settings) -> ASRService:
     global _asr_service
 
+    logger.info("=" * 60)
+    logger.info("ASR Service Initialization Started")
+    logger.info("=" * 60)
+
     if not getattr(settings, "asr_enabled", True):
-        logger.info("ASR disabled")
+        logger.warning("ASR disabled in configuration")
         _asr_service = None
         return None
 
     api_key = getattr(settings, "asr_api_key", None)
+    logger.info(f"ASR API Key: {'***present***' if api_key else '***missing***'}")
+
     if not api_key:
-        logger.warning("ASR API key missing")
+        logger.error("ASR API key missing, cannot initialize ASR service")
         _asr_service = None
         return None
 
@@ -199,13 +211,63 @@ def init_asr_service(settings) -> ASRService:
     fallback_model = getattr(settings, "asr_fallback_model", "")
 
     logger.info(
-        "Initializing ASR service: model=%s, fallback_model=%s, base_url=%s",
+        "ASR Configuration: model=%s, fallback_model=%s, base_url=%s",
         model,
-        fallback_model or "-",
+        fallback_model or "(none)",
         base_url,
     )
 
-    if "siliconflow.cn" in base_url or "api.siliconflow" in base_url:
+    # 检测是否为阿里云ASR（使用nls-gateway端点）
+    if "aliyun" in base_url or "nls-gateway" in base_url or "nls-meta" in base_url:
+        logger.info("Detected Alibaba Cloud ASR configuration")
+
+        app_key = getattr(settings, "asr_app_key", None)
+        token = getattr(settings, "asr_token", None)
+
+        logger.info(f"Alibaba Cloud ASR - app_key: {'***present***' if app_key else '***missing***'}")
+        logger.info(f"Alibaba Cloud ASR - token: {'***present***' if token else '***missing***'}")
+        logger.info(f"DEBUG - token value: '{token}', type: {type(token)}, len: {len(token) if token else 0}")
+
+        if not app_key:
+            logger.error("阿里云ASR需要 app_key（从环境变量 ALIBABA_ASR_APP_KEY 获取）")
+            _asr_service = None
+            return None
+
+        if not token:
+            logger.warning(
+                "阿里云ASR未配置 token（从环境变量 ALIBABA_ASR_TOKEN 获取），"
+                "请访问 https://nls-portal.console.aliyun.com/ 获取Token"
+            )
+
+        logger.info(
+            "使用阿里云ASR - 一句话识别API（实时同步）, "
+            f"app_key={app_key[:8]}..., token={'***configured***' if token else '***missing***'}"
+        )
+
+        try:
+            _asr_service = AlibabaASRService(
+                api_key="unused",  # 不再使用，保留兼容性
+                api_secret="unused",  # 不再使用，保留兼容性
+                app_key=app_key,
+                base_url=base_url,
+                model=model,
+                language=getattr(settings, "asr_language", "zh-CN"),
+                format=getattr(settings, "asr_format", "wav"),
+                sample_rate=getattr(settings, "asr_sample_rate", 16000),
+                enable_punctuation=getattr(settings, "asr_enable_punctuation", True),
+                enable_inverse_text_normalization=getattr(settings, "asr_enable_inverse_text_normalization", True),
+                enable_voice_detection=getattr(settings, "asr_enable_voice_detection", False),
+                token=token or "",  # 传入token（如果配置文件中有的话）
+            )
+            logger.info("ASR Service initialized successfully: type=AlibabaASRService")
+            logger.info(f"ASR Service config: sample_rate={getattr(settings, 'asr_sample_rate', 16000)}, "
+                       f"format={getattr(settings, 'asr_format', 'wav')}, "
+                       f"language={getattr(settings, 'asr_language', 'zh-CN')}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Alibaba Cloud ASR service: {e}", exc_info=True)
+            _asr_service = None
+            return None
+    elif "siliconflow.cn" in base_url or "api.siliconflow" in base_url:
         _asr_service = SiliconFlowASRService(
             api_key=api_key,
             base_url=base_url,
@@ -223,4 +285,9 @@ def init_asr_service(settings) -> ASRService:
 
 
 def get_asr_service() -> Optional[ASRService]:
+    """获取ASR服务实例"""
+    if _asr_service is None:
+        logger.warning("ASR service requested but not initialized")
+    else:
+        logger.debug(f"ASR service retrieved: {type(_asr_service).__name__}")
     return _asr_service

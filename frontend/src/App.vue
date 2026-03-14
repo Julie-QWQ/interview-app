@@ -32,7 +32,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, ChatLineRound, Collection, User, Camera, Setting, Microphone, VideoCamera } from '@element-plus/icons-vue'
+import { DataLine, ChatLineRound, Collection, User, Camera, Setting, Microphone, VideoCamera, Tools } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -45,6 +45,7 @@ const navItems = [
   { label: '阶段配置', path: '/admin/stages', icon: DataLine },
   { label: '语音配置', path: '/admin/voice', icon: Microphone },
   { label: '画像管理', path: '/admin/profiles', icon: User },
+  { label: '外部模块测试', path: '/test/external-module', icon: Tools },
   { label: '摄像头测试', path: '/test/camera', icon: Camera },
   { label: '数字人测试', path: '/test/digital-human', icon: VideoCamera }
 ]

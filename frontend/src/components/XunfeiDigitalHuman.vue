@@ -15,7 +15,7 @@
       <el-icon class="is-loading" :size="60">
         <Loading />
       </el-icon>
-      <p>正在连接数字人...</p>
+      <p>coming...</p>
     </div>
 
     <div v-if="error" class="error-message">
@@ -354,8 +354,18 @@ const iframeSrcdoc = computed(() => `<!DOCTYPE html>
             if (avatarPlatform.player) {
               avatarPlatform.player.muted = false;
               avatarPlatform.player.volume = 1;
-              if (typeof avatarPlatform.player.resume === 'function') {
-                await avatarPlatform.player.resume();
+              // Only resume if the player has an active stream
+              if (typeof avatarPlatform.player.resume === 'function' &&
+                  avatarPlatform.player.srcObject ||
+                  avatarPlatform.player.readyState >= 2) { // HAVE_CURRENT_DATA
+                try {
+                  await avatarPlatform.player.resume();
+                } catch (resumeErr) {
+                  // Ignore "stream not found" errors - stream may not be ready yet
+                  if (!resumeErr?.message?.includes('stream not found')) {
+                    console.warn('[XunfeiDigitalHumanFrame] player resume failed', resumeErr);
+                  }
+                }
               }
             }
           } catch (err) {
@@ -510,7 +520,7 @@ function isIgnorableRuntimeError(err) {
   )
 }
 
-function waitForIframeReady(timeoutMs = 10000) {
+function waitForIframeReady(timeoutMs = 30000) { // 从10秒增加到30秒
   if (destroyed.value) {
     return Promise.reject(new Error('Digital human runtime reset'))
   }
@@ -629,10 +639,11 @@ async function initialize() {
   error.value = ''
   isVideoReady.value = false
 
+  // 增加初始化超时时间到60秒，因为讯飞数字人连接较慢
   await sendCommand('init', {
     sessionId: props.sessionId,
     config: buildSerializableConfig(props.config)
-  })
+  }, 60000) // 从默认20秒增加到60秒
 
   runtimeInitialized.value = true
   if (userGestureCaptured.value) {
@@ -658,9 +669,13 @@ async function unlockAudio() {
     audioUnlocked.value = true
   } catch (err) {
     const message = String(err?.message || err || '')
-    if (!message.includes('NotAllowedError')) {
+    // Ignore "stream not found" and "NotAllowedError" - stream may not be ready yet
+    // The audio will be unlocked when the stream is actually needed
+    if (!message.includes('NotAllowedError') && !message.includes('stream not found')) {
       console.warn('[XunfeiDigitalHuman] unlock audio failed', err)
     }
+    // Still mark as unlocked to avoid repeated attempts
+    audioUnlocked.value = true
   }
 }
 

@@ -407,6 +407,89 @@ class ExpressionAnalyzerService:
             summary += f" 关键证据：{evidence_summary[0]}"
         return summary.strip()
 
+    def generate_report(self, interview_id: int) -> Dict[str, Any] | None:
+        """Generate expression analysis report for an interview."""
+        from app.db import database
+
+        # Get audio segments (feature_type='audio_segment') for this interview
+        audio_rows = database.list_expression_feature_segments(interview_id, feature_type='audio_segment')
+        audio_segments = [
+            {
+                **row.get('metrics', {}),
+                'segment_id': row.get('segment_key'),
+                'stage': row.get('stage'),
+                'source': row.get('source'),
+                'started_at': row.get('started_at'),
+                'ended_at': row.get('ended_at'),
+            }
+            for row in audio_rows
+            if row.get('metrics')
+        ]
+
+        # Get video windows (feature_type='video_window') for this interview
+        video_rows = database.list_expression_feature_segments(interview_id, feature_type='video_window')
+        video_windows = [
+            {
+                **row.get('metrics', {}),
+                'window_id': row.get('segment_key'),
+                'stage': row.get('stage'),
+                'source': row.get('source'),
+                'started_at': row.get('started_at'),
+                'ended_at': row.get('ended_at'),
+            }
+            for row in video_rows
+            if row.get('metrics')
+        ]
+
+        if not audio_segments and not video_windows:
+            logger.warning(f"No audio or video data found for interview {interview_id}")
+            return None
+
+        # Analyze the data
+        result = self.analyze(interview_id, audio_segments, video_windows)
+
+        # Convert to dict for storage
+        return {
+            "interview_id": result.interview_id,
+            "overall_score": result.overall_score,
+            "confidence_level": result.confidence_level,
+            "confidence_score": result.confidence_score,
+            "modality_coverage": result.modality_coverage,
+            "dimension_scores": result.dimension_scores,
+            "evidence_summary": result.evidence_summary,
+            "risk_flags": result.risk_flags,
+            "narrative_summary": result.narrative_summary,
+            "metrics": result.metrics,
+        }
+
+    async def generate_and_save_report(
+        self,
+        interview_id: int,
+        stage: str | None = None
+    ) -> Dict[str, Any] | None:
+        """
+        异步生成并保存评估报告。
+
+        Args:
+            interview_id: 面试ID
+            stage: 可选的阶段标识,用于标记阶段性报告
+
+        Returns:
+            报告数据字典
+        """
+        report = self.generate_report(interview_id)
+
+        if report:
+            from app.db import database
+            report_id = database.save_expression_analysis_report(report)
+            logger.info(
+                f"Expression analysis report {report_id} generated "
+                f"for interview {interview_id} (stage: {stage or 'final'})"
+            )
+            return {"report_id": report_id, **report}
+
+        return None
+
 
 _expression_analyzer_service: Optional[ExpressionAnalyzerService] = None
 

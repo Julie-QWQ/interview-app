@@ -146,8 +146,9 @@
             <h4>页面职责</h4>
             <p>这里维护工具 Provider、描述、请求地址、请求头，以及运行时超时和缓存参数。</p>
             <h4>Tool Prompt</h4>
-            <p>先为工具选择 `URL` 或 `LLM` 模式。`URL` 模式只配置请求地址和请求头；`LLM` 模式配置 `System Prompt`、`User Prompt`、`Result Prompt`。</p>
-            <p>`structured_payload` 是当前工具自己的结构，不存在全局固定字段。若工具没有稳定结构化字段，可直接使用 `{{ raw_prompt_context }}`。`smart_reply_engine` 的 `action_key / action_label / rationale / utterance` 仅适用于它自己。</p>
+            <p>先为工具选择 `URL` 或 `LLM` 模式。`URL` 模式配置请求地址和请求头；`LLM` 模式额外配置 `System Prompt` 和 `User Prompt`。</p>
+            <p><strong>所有工具</strong>都需要配置 `Result Prompt`,用于将工具返回的JSON结果转换为自然语言,然后插入到主面试官的prompt中。</p>
+            <p>`structured_payload` 是当前工具自己的结构,不存在全局固定字段。若工具没有稳定结构化字段,可直接使用 `{{ raw_prompt_context }}`。`smart_reply_engine` 的 `action_key / action_label / rationale / utterance` 仅适用于它自己。</p>
 
             <h4>阶段绑定</h4>
             <p>每个面试阶段在什么触发器下使用哪些工具，请到“阶段配置”页面拖拽绑定。</p>
@@ -210,7 +211,7 @@
         </template>
 
         <template v-else>
-        <el-divider content-position="left">Tool Prompt</el-divider>
+        <el-divider content-position="left">LLM 工具 Prompt</el-divider>
 
         <el-form-item label="System Prompt">
           <el-input
@@ -229,6 +230,9 @@
             placeholder="可选。仅当该工具自身还会调用 LLM 时才需要；纯 URL 程序工具可留空"
           />
         </el-form-item>
+        </template>
+
+        <el-divider content-position="left">结果渲染配置</el-divider>
 
         <el-form-item label="Result Prompt">
           <el-input
@@ -238,7 +242,6 @@
             placeholder="工具返回结果如何渲染为主面试官可消费的提示文案。structured_payload 是当前工具自己的结构；若不确定字段，先用 {{ raw_prompt_context }}"
           />
         </el-form-item>
-        </template>
       </el-form>
 
       <template #footer>
@@ -299,6 +302,15 @@
             placeholder='例如：{"Authorization":"Bearer xxx"}，可先留空'
           />
         </el-form-item>
+
+        <el-form-item label="Result Prompt">
+          <el-input
+            v-model="createForm.result_prompt_template"
+            type="textarea"
+            :rows="6"
+            placeholder="工具返回结果如何渲染为主面试官可消费的提示文案。可先留空"
+          />
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -354,7 +366,8 @@ const createForm = reactive({
   mode: 'url',
   enabled: false,
   url: '',
-  headers: '{}'
+  headers: '{}',
+  result_prompt_template: ''
 })
 
 const providerHeaderDrafts = reactive({})
@@ -405,6 +418,7 @@ function resetCreateForm() {
   createForm.enabled = false
   createForm.url = ''
   createForm.headers = '{}'
+  createForm.result_prompt_template = ''
 }
 
 function openDetailDialog(toolName) {
@@ -571,7 +585,10 @@ function handleCreateProvider() {
     url: createForm.url || '',
     headers
   }
-  config.tools.tool_prompts[toolName] = createEmptyToolPrompt()
+  config.tools.tool_prompts[toolName] = {
+    ...createEmptyToolPrompt(),
+    result_prompt_template: createForm.result_prompt_template || ''
+  }
   providerHeaderDrafts[toolName] = JSON.stringify(headers, null, 2)
   activeToolName.value = toolName
   createDialogVisible.value = false

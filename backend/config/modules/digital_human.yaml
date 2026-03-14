@@ -1,0 +1,9 @@
+digital_human:
+  provider: xunfei
+  xunfei:
+    app_id: 58ffe417
+    api_key: d161b013f933310e4c7ee002183e470b
+    api_secret: OWZjY2RhNTg2M2U4OTc4NDJmMjE1MmZk
+    scene_id: '290343704030482432'
+    sample_rate: 16000
+    xrtc_url: wss://bra.xfyun.cn/rtc-api

@@ -51,7 +51,7 @@ if errorlevel 1 (
 )
 
 echo [INFO] Starting backend service (port 8000 via uvicorn)...
-start "AI Interview System - Backend" cmd /k "cd /d %CD% && .venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+start "AI Interview System - Backend" cmd /k "cd /d %CD% && .venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
 cd ..
 
 echo [SUCCESS] Backend service started

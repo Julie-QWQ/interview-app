@@ -40,67 +40,84 @@ class PromptService:
         if not config_data:
             return DEFAULT_PROMPT_CONFIG.model_dump()
 
-        normalized = DEFAULT_PROMPT_CONFIG.model_dump()
-        for key, value in config_data.items():
-            if value is not None:
-                normalized[key] = value
+        # 以用户配置为基础，而不是默认配置
+        normalized = {}
+        default_config = DEFAULT_PROMPT_CONFIG.model_dump()
 
-        raw_tools = config_data.get("tools") or {}
-        normalized_tools = {
-            **normalized.get("tools", {}),
-            **raw_tools,
-        }
+        # 遍历默认配置的所有键
+        for key, default_value in default_config.items():
+            user_value = config_data.get(key)
 
-        default_tools = DEFAULT_PROMPT_CONFIG.model_dump().get("tools", {})
+            if user_value is None:
+                # 用户没有提供该字段，使用默认值
+                normalized[key] = default_value
+            elif key == "tools":
+                # 工具配置特殊处理：基于用户配置
+                normalized[key] = PromptService._normalize_tools_config(
+                    user_value, default_value
+                )
+            else:
+                # 使用用户提供的值
+                normalized[key] = user_value
+
+        return normalized
+
+    @staticmethod
+    def _normalize_tools_config(
+        user_tools: Dict[str, Any],
+        default_tools: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """专门处理工具配置的合并，确保用户删除的工具不会重新出现"""
+        normalized = {}
+
+        # 处理 providers：使用用户配置的 providers，不添加默认的
+        user_providers = user_tools.get("providers") or {}
         default_providers = default_tools.get("providers") or {}
-        raw_providers = raw_tools.get("providers") or {}
-        normalized_tools["providers"] = {
-            **default_providers,
-            **raw_providers,
-        }
+
+        if user_providers:
+            # 如果用户提供了 providers 配置，完全使用用户的配置
+            # 不合并默认配置，这样删除的工具不会重新出现
+            normalized["providers"] = user_providers
+        else:
+            # 用户没有提供 providers，使用默认配置
+            normalized["providers"] = default_providers
+
+        # 处理 tool_prompts：类似逻辑
+        user_tool_prompts = user_tools.get("tool_prompts") or {}
         default_tool_prompts = default_tools.get("tool_prompts") or {}
-        raw_tool_prompts = raw_tools.get("tool_prompts") or {}
-        normalized_tools["tool_prompts"] = {
-            **default_tool_prompts,
-            **raw_tool_prompts,
-        }
-        smart_reply_provider = normalized_tools["providers"].get("smart_reply_engine") or {}
-        default_smart_reply_provider = default_providers.get("smart_reply_engine") or {}
-        if not str(smart_reply_provider.get("url") or "").strip():
-            normalized_tools["providers"]["smart_reply_engine"] = {
-                **smart_reply_provider,
-                "url": default_smart_reply_provider.get("url", ""),
-            }
 
+        if user_tool_prompts:
+            normalized["tool_prompts"] = user_tool_prompts
+        else:
+            normalized["tool_prompts"] = default_tool_prompts
+
+        # 处理 bindings：类似逻辑
+        user_bindings = user_tools.get("bindings") or {}
         default_bindings = default_tools.get("bindings") or {}
-        raw_bindings = raw_tools.get("bindings") or {}
-        normalized_bindings = {}
-        for stage_key, default_binding in default_bindings.items():
-            raw_binding = raw_bindings.get(stage_key) or {}
-            default_trigger_map = default_binding.get("trigger_map") or {}
-            raw_trigger_map = raw_binding.get("trigger_map") or {}
-            merged_trigger_map = {}
-            for trigger_key, tool_names in default_trigger_map.items():
-                raw_tool_names = list(raw_trigger_map.get(trigger_key) or [])
-                merged_list = list(raw_tool_names)
-                for tool_name in tool_names:
-                    if tool_name not in merged_list:
-                        merged_list.append(tool_name)
-                merged_trigger_map[trigger_key] = merged_list
-            for trigger_key, tool_names in raw_trigger_map.items():
-                if trigger_key not in merged_trigger_map:
-                    merged_trigger_map[trigger_key] = list(tool_names or [])
-            normalized_bindings[stage_key] = {
-                **default_binding,
-                **raw_binding,
-                "trigger_map": merged_trigger_map,
-            }
-        for stage_key, raw_binding in raw_bindings.items():
-            if stage_key not in normalized_bindings:
-                normalized_bindings[stage_key] = raw_binding
-        normalized_tools["bindings"] = normalized_bindings
 
-        normalized["tools"] = normalized_tools
+        if user_bindings:
+            normalized["bindings"] = user_bindings
+        else:
+            normalized["bindings"] = default_bindings
+
+        # 处理 timeouts：如果用户提供了则使用用户的，否则使用默认值
+        user_timeouts = user_tools.get("timeouts") or {}
+        default_timeouts = default_tools.get("timeouts") or {}
+        normalized["timeouts"] = {**default_timeouts, **user_timeouts}
+
+        # 处理 cache：如果用户提供了则使用用户的，否则使用默认值
+        user_cache = user_tools.get("cache") or {}
+        default_cache = default_tools.get("cache") or {}
+        normalized["cache"] = {**default_cache, **user_cache}
+
+        # 处理 smart_reply_catalog：如果用户提供了则使用用户的，否则使用默认值
+        user_catalog = user_tools.get("smart_reply_catalog") or {}
+        default_catalog = default_tools.get("smart_reply_catalog") or {}
+        normalized["smart_reply_catalog"] = {
+            **default_catalog,
+            **user_catalog
+        }
+
         return normalized
 
     def _load_file_config(self) -> InterviewPromptConfig:
@@ -138,7 +155,8 @@ class PromptService:
             **current,
             **prompt_payload,
         }
-        settings.replace_all(merged)
+        # 使用模块化保存方法
+        settings.save_modular_config(merged)
 
     def _template_path(self) -> Path:
         return self.prompts_dir / self.template_name

@@ -88,10 +88,10 @@ const isSpeakingVisual = computed(() => isVideoPlaying.value || props.isSpeaking
 
 const statusText = computed(() => {
   if (showErrorState.value) return '数字人异常'
-  if (props.isThinking) return '思考中...'
-  if (isVideoPlaying.value) return '播放中'
-  if (props.isSpeaking) return '说话中'
-  return '待命中'
+  if (props.isThinking) return 'thinking...'
+  if (isVideoPlaying.value) return 'speaking...'
+  if (props.isSpeaking) return 'speaking...'
+  return 'listening...'
 })
 
 const statusClass = computed(() => {

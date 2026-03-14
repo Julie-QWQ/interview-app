@@ -1,0 +1,220 @@
+tools:
+  providers:
+    question_bank:
+      description: 题库RAG服务 - 支持题目检索、追问提示、答题反馈和知识文档检索
+      mode: url
+      enabled: true
+      url: http://10.179.224.63:8004/api
+      headers: {}
+    learning_resource:
+      description: 学习资源推荐服务 v1.1 - 按薄弱技能或标签推荐学习资源
+      mode: url
+      enabled: true
+      url: http://localhost:8004
+      headers: {}
+    followup_engine:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    question_bank_retriever:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    resume_analyzer:
+      description: ''
+      mode: url
+      enabled: false
+      url: ''
+      headers: {}
+    smart_reply_engine:
+      description: 智能回复
+      mode: llm
+      enabled: true
+      url: ''
+      headers: {}
+  tool_prompts:
+    question_bank:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 题库检索与知识增强
+      result_prompt_template: '{% if structured_payload.questions %}检索到 {{ structured_payload.count
+        }} 道题目： {% for q in structured_payload.questions[:3] %}{{ loop.index }}. [{{
+        q.code }}] {{ q.text }} 难度:{{ q.difficulty }} 标签:{{ q.tags|join('' '') }}
+        {% endfor %} {% elif structured_payload.hints %}追问建议：{% for h in structured_payload.hints
+        %}- {{ h }} {% endfor %} {% elif structured_payload.documents %}RAG检索到 {{
+        structured_payload.doc_count }} 份知识文档：{% for d in structured_payload.documents[:3]
+        %}- {{ d.title }} ({{ d.tags|join('' '') }}) {% endfor %} {% endif %}'
+    followup_engine:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 追问建议
+      result_prompt_template: '{{ raw_prompt_context }}'
+    question_bank_retriever:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 题库检索
+      result_prompt_template: '{{ raw_prompt_context }}'
+    resume_analyzer:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: 简历分析
+      result_prompt_template: '{{ raw_prompt_context }}'
+    smart_reply_engine:
+      system_prompt: 'You are a smart interview action selector.
+
+
+        Choose exactly one next interviewer action.
+
+        Return JSON only with keys: action_key, action_label, rationale, utterance.
+
+
+        Requirements:
+
+        - action_key must be one of the allowed actions.
+
+        - utterance must be one natural interviewer sentence in Chinese.
+
+        - Keep rationale concise.
+
+        - Prefer the provided utterance templates, but you may rewrite naturally.
+
+        - Do not output markdown or code fences.'
+      user_prompt_template: 'stage: {{ stage }}
+
+
+        latest_user_message: {{ latest_user_message or ''(empty)'' }}
+
+
+        recent_messages:
+
+        {{ recent_messages_text }}
+
+
+        allowed_actions:
+
+        {{ allowed_actions_text }}
+
+
+        Choose the best next action for the interviewer.'
+      context_label: 智能回复建议
+      result_prompt_template: '- 建议行为: {{ structured_payload.action_label or structured_payload.action_key
+        }}
+
+        - 行为标识: {{ structured_payload.action_key }}
+
+        - 行为意图: {{ structured_payload.rationale or ''结合候选人最新回答决定下一步最合适的动作。'' }}
+
+        - 推荐语料: {{ structured_payload.utterance }}
+
+        - 使用约束: 你可以自然改写推荐语料，但必须遵循该行为意图，单轮只执行一个主动作。'
+    learning_resource:
+      system_prompt: ''
+      user_prompt_template: ''
+      context_label: ''
+      result_prompt_template: ''
+  bindings:
+    closing:
+      trigger_map:
+        interview_start: []
+        stage_enter: []
+        user_turn: []
+        stage_exit: []
+      cache_only: true
+    scenario:
+      trigger_map:
+        interview_start: []
+        stage_enter:
+        - question_bank_retriever
+        user_turn:
+        - question_bank_retriever
+        - followup_engine
+        - smart_reply_engine
+        stage_exit: []
+      cache_only: false
+    technical:
+      trigger_map:
+        interview_start: []
+        stage_enter:
+        - question_bank
+        user_turn:
+        - question_bank
+        - smart_reply_engine
+        stage_exit: []
+      cache_only: false
+    welcome:
+      trigger_map:
+        interview_start:
+        - resume_analyzer
+        stage_enter: []
+        user_turn: []
+        stage_exit: []
+      cache_only: false
+  timeouts:
+    chat_seconds: 5.0
+    prefetch_seconds: 4.0
+  cache:
+    question_bank_top_k: 5
+    followup_top_k: 3
+    smart_reply_ttl_seconds: 60
+  smart_reply_catalog:
+    actions:
+    - action_key: ask_new_question
+      enabled: true
+      label: 提新问题
+      description: 当前回答已足够，可以切入下一个问题。
+      utterance_templates:
+      - 我们进入下一个问题。
+      - 这个点我了解了，接下来想换个角度问你。
+    - action_key: probe_detail
+      enabled: true
+      label: 追细节
+      description: 继续深挖技术细节、方案细节或实现细节。
+      utterance_templates:
+      - 你把这一部分的具体实现再展开讲讲。
+      - 这里的关键细节是什么？请具体说明。
+    - action_key: probe_contribution
+      enabled: true
+      label: 追个人贡献
+      description: 聚焦候选人在项目中的个人职责和实际产出。
+      utterance_templates:
+      - 这里你个人具体负责了哪一部分？
+      - 这个结果里，哪些是你亲自推动完成的？
+    - action_key: challenge
+      enabled: true
+      label: 质疑
+      description: 对模糊、可疑或前后不一致的表述进行挑战。
+      utterance_templates:
+      - 这个说法我想再核实一下，你的依据是什么？
+      - 如果按你这个方案执行，风险点会在哪里？
+    - action_key: clarify
+      enabled: true
+      label: 澄清
+      description: 候选人表达模糊、跳跃或缺少关键信息时先澄清。
+      utterance_templates:
+      - 我先确认一下，你刚才的意思是？
+      - 这里我理解得还不够清楚，你能换个方式再说一遍吗？
+    - action_key: refocus
+      enabled: true
+      label: 拉回主线
+      description: 用户跑题、回避或信息噪声过多时拉回目标问题。
+      utterance_templates:
+      - 我们先回到刚才那个核心问题。
+      - 先聚焦在你刚提到的这个关键点上。
+    - action_key: transition
+      enabled: true
+      label: 转场
+      description: 当前话题可以收束，准备切换到新的主题或阶段。
+      utterance_templates:
+      - 这个部分先到这里，我们切到下一个主题。
+      - 我想从另一个维度继续了解你。
+    - action_key: close
+      enabled: true
+      label: 收尾
+      description: 当前轮次或阶段适合做简短收束。
+      utterance_templates:
+      - 这个问题我了解得差不多了，我们做个小结。
+      - 好的，这部分先收一下。

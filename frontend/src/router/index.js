@@ -78,6 +78,11 @@ const routes = [
     path: '/test/xunfei-digital-human',
     name: 'XunfeiDigitalHumanTest',
     component: () => import('@/views/DigitalHumanTest.vue')
+  },
+  {
+    path: '/test/external-module',
+    name: 'ExternalModuleTest',
+    component: () => import('@/views/ExternalModuleTest.vue')
   }
 ]
 

@@ -48,21 +48,43 @@ class Settings:
         if config_path is None:
             config_path = Path(__file__).parent / "config.yaml"
 
+        self.config_dir = Path(config_path).parent
         self.config_path = Path(config_path)
         self._config = self._load_config()
         self._apply_env_overrides()
         self._validate_required_secrets()
 
     def _load_config(self) -> dict:
-        """加载配置文件"""
+        """加载主配置文件并合并所有子配置文件"""
         if not self.config_path.exists():
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
 
+        # 加载主配置文件
         with open(self.config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
+            main_config = yaml.safe_load(f)
+
+        # 获取需要导入的子配置文件列表
+        includes = main_config.get('includes', [])
+
+        # 合并所有子配置文件
+        merged_config = {}
+        for module_name in includes:
+            module_config_path = self.config_dir / f"{module_name}.yaml"
+            if module_config_path.exists():
+                with open(module_config_path, 'r', encoding='utf-8') as f:
+                    module_config = yaml.safe_load(f)
+                    if module_config:
+                        merged_config.update(module_config)
+            else:
+                raise FileNotFoundError(f"子配置文件不存在: {module_config_path}")
+
+        # 主配置文件的顶级配置优先级更高（如 app 配置）
+        for key, value in main_config.items():
+            if key != 'includes':
+                merged_config[key] = value
 
         # 递归处理环境变量占位符 ${VAR:default}
-        return self._process_env_vars(config)
+        return self._process_env_vars(merged_config)
 
     def _process_env_vars(self, config):
         """递归处理配置中的环境变量占位符"""
@@ -92,9 +114,15 @@ class Settings:
         if db_password := os.getenv("DB_PASSWORD"):
             self._config['database']['password'] = db_password
 
-        # ASR 密钥（敏感，可选）
-        if asr_api_key := os.getenv("ASR_API_KEY"):
-            self._config['asr']['api_key'] = asr_api_key
+        # 阿里云 ASR 密钥（敏感）
+        if alibaba_app_key := os.getenv("ALIBABA_ASR_APP_KEY"):
+            if 'asr' not in self._config:
+                self._config['asr'] = {}
+            self._config['asr']['app_key'] = alibaba_app_key
+        if alibaba_token := os.getenv("ALIBABA_ASR_TOKEN"):
+            if 'asr' not in self._config:
+                self._config['asr'] = {}
+            self._config['asr']['token'] = alibaba_token
 
     def _validate_required_secrets(self):
         """启动时校验必填敏感配置，缺失则快速失败。"""
@@ -135,6 +163,72 @@ class Settings:
         """Replace the full config and persist to disk."""
         self._config = deepcopy(config)
         self.save()
+        self.reload()
+
+    def save_modular_config(self, config: dict) -> None:
+        """
+        保存模块化配置，将不同部分的配置写入对应的模块文件中
+
+        Args:
+            config: 完整的配置字典
+        """
+        # 定义模块映射关系：配置键 -> 模块文件名
+        module_mapping = {
+            'database': 'modules/database',
+            'ai': 'modules/ai',
+            'asr': 'modules/asr',
+            'digital_human': 'modules/digital_human',
+            'voice': 'modules/voice',
+            'expression_analysis': 'modules/expression_analysis',
+            'profiles': 'modules/profiles',
+            'tools': 'modules/tools',
+            'stages': 'modules/stages',
+            'base_system_prompt': 'modules/prompts',
+            'interviewer_style_prompt': 'modules/prompts',
+            'tool_context_template': 'modules/prompts',
+            'llm': 'modules/system',
+        }
+
+        # 按模块分组配置
+        modular_configs = {}
+        main_config = {}
+
+        for key, value in config.items():
+            if key in module_mapping:
+                module_name = module_mapping[key]
+                if module_name not in modular_configs:
+                    modular_configs[module_name] = {}
+                modular_configs[module_name][key] = value
+            else:
+                # 不属于任何模块的配置放入主配置文件
+                main_config[key] = value
+
+        # 确保 includes 字段存在
+        main_config['includes'] = [
+            'modules/database',
+            'modules/ai',
+            'modules/asr',
+            'modules/digital_human',
+            'modules/voice',
+            'modules/expression_analysis',
+            'modules/profiles',
+            'modules/tools',
+            'modules/stages',
+            'modules/prompts',
+            'modules/system',
+        ]
+
+        # 保存主配置文件
+        with open(self.config_path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(main_config, f, allow_unicode=True, sort_keys=False)
+
+        # 保存各个模块文件
+        for module_name, module_config in modular_configs.items():
+            module_path = self.config_dir / f"{module_name}.yaml"
+            with open(module_path, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(module_config, f, allow_unicode=True, sort_keys=False)
+
+        # 重新加载配置
         self.reload()
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -223,6 +317,51 @@ class Settings:
     @property
     def asr_enabled(self) -> bool:
         return self._config.get('asr', {}).get('enabled', True)
+
+    @property
+    def asr_api_secret(self) -> str:
+        """阿里云ASR API Secret"""
+        return self._config.get('asr', {}).get('api_secret', '')
+
+    @property
+    def asr_app_key(self) -> str:
+        """阿里云ASR App Key"""
+        return self._config.get('asr', {}).get('app_key', '')
+
+    @property
+    def asr_token(self) -> str:
+        """阿里云ASR Token"""
+        return self._config.get('asr', {}).get('token', '')
+
+    @property
+    def asr_language(self) -> str:
+        """ASR语言设置"""
+        return self._config.get('asr', {}).get('language', 'zh-CN')
+
+    @property
+    def asr_format(self) -> str:
+        """ASR音频格式"""
+        return self._config.get('asr', {}).get('format', 'wav')
+
+    @property
+    def asr_sample_rate(self) -> int:
+        """ASR采样率"""
+        return self._config.get('asr', {}).get('sample_rate', 16000)
+
+    @property
+    def asr_enable_punctuation(self) -> bool:
+        """ASR是否启用标点符号"""
+        return self._config.get('asr', {}).get('enable_punctuation', True)
+
+    @property
+    def asr_enable_inverse_text_normalization(self) -> bool:
+        """ASR是否启用数字规范化"""
+        return self._config.get('asr', {}).get('enable_inverse_text_normalization', True)
+
+    @property
+    def asr_enable_voice_detection(self) -> bool:
+        """ASR是否启用人声检测"""
+        return self._config.get('asr', {}).get('enable_voice_detection', True)
 
     @property
     def cors_origins(self) -> list:

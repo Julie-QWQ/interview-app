@@ -111,6 +111,8 @@ def create_app(
     from .api.test_routes import router as test_routes_router
     from .api.tools import router as tools_router
     from .api.voice import router as voice_router
+    from .api.question_bank_test import router as question_bank_test_router
+    from .api.resume_analyzer_test import router as resume_analyzer_test_router
 
     app.include_router(configs_router)
     app.include_router(voice_router)
@@ -124,6 +126,9 @@ def create_app(
     app.include_router(snapshots_router)
     app.include_router(profiles_router)
     app.include_router(profile_plugins_router)
+    # Test routes for external tools - uncomment to enable
+    app.include_router(question_bank_test_router)
+    app.include_router(resume_analyzer_test_router)
 
     @app.get("/health")
     def health_check() -> dict[str, str]:

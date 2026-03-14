@@ -1,9 +1,12 @@
 """API工具函数模块."""
+import logging
 from datetime import datetime
 from typing import Any, Dict
 from copy import deepcopy
 
 from config.settings import DEFAULT_VOICE_CONFIG
+
+logger = logging.getLogger(__name__)
 
 SEGMENT_HARD_SEPARATORS = {"。", "！", "？", ".", "!", "?", "\n"}
 SEGMENT_SOFT_SEPARATORS = {"，", ",", "；", ";", "：", ":"}
@@ -177,14 +180,10 @@ def finalize_expression_analysis(interview_id: int) -> Dict[str, Any] | None:
         report = analyzer.generate_report(interview_id)
 
         if report:
-            report_id = database.create_expression_report({
-                "interview_id": interview_id,
-                "report_data": report
-            })
+            report_id = database.save_expression_analysis_report(report)
             return {"report_id": report_id, **report}
     except Exception as e:
-        import logging
-        logging.error(f"Failed to finalize expression analysis for interview {interview_id}: {e}")
+        logger.error(f"Failed to finalize expression analysis for interview {interview_id}: {e}")
     return None
 
 

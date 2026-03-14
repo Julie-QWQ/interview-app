@@ -165,6 +165,7 @@
               <div
                 v-for="trigger in triggerKeys"
                 :key="trigger"
+                v-if="currentBinding"
                 class="trigger-zone"
                 :class="{ 'is-over': dragOverTrigger === trigger }"
                 @dragover.prevent="handleTriggerDragOver(trigger)"
@@ -176,12 +177,12 @@
                     <strong>{{ triggerLabelMap[trigger] }}</strong>
                     <p>{{ triggerDescMap[trigger] }}</p>
                   </div>
-                  <el-tag size="small">{{ currentBinding.trigger_map[trigger].length }} 个</el-tag>
+                  <el-tag size="small">{{ (currentBinding?.trigger_map?.[trigger] || []).length }} 个</el-tag>
                 </div>
 
                 <div class="trigger-bubbles">
                   <button
-                    v-for="toolName in currentBinding.trigger_map[trigger]"
+                    v-for="toolName in (currentBinding?.trigger_map?.[trigger] || [])"
                     :key="`${trigger}-${toolName}`"
                     class="tool-bubble tool-bubble--assigned"
                     type="button"
@@ -201,7 +202,7 @@
                     </span>
                   </button>
 
-                  <div v-if="currentBinding.trigger_map[trigger].length === 0" class="trigger-empty">
+                  <div v-if="(currentBinding?.trigger_map?.[trigger] || []).length === 0" class="trigger-empty">
                     将工具气泡拖到这里
                   </div>
                 </div>
@@ -223,16 +224,18 @@ const loading = ref(false)
 const saving = ref(false)
 const resetting = ref(false)
 
-const triggerKeys = ['interview_start', 'stage_enter', 'user_turn']
+const triggerKeys = ['interview_start', 'stage_enter', 'user_turn', 'stage_exit']
 const triggerLabelMap = {
   interview_start: 'interview_start',
   stage_enter: 'stage_enter',
-  user_turn: 'user_turn'
+  user_turn: 'user_turn',
+  stage_exit: 'stage_exit'
 }
 const triggerDescMap = {
   interview_start: '开始面试时触发，适合首轮预加载。',
   stage_enter: '进入当前阶段时触发，适合阶段级预取。',
-  user_turn: '用户每轮发言后触发，适合实时追问与补充。'
+  user_turn: '用户每轮发言后触发，适合实时追问与补充。',
+  stage_exit: '退出当前阶段时触发，适合阶段总结与数据清理。'
 }
 
 const fullConfig = reactive({
@@ -272,7 +275,8 @@ function createEmptyBinding() {
     trigger_map: {
       interview_start: [],
       stage_enter: [],
-      user_turn: []
+      user_turn: [],
+      stage_exit: []
     },
     cache_only: false
   }
@@ -283,7 +287,8 @@ function ensureBinding(binding = {}) {
     trigger_map: {
       interview_start: Array.isArray(binding?.trigger_map?.interview_start) ? [...binding.trigger_map.interview_start] : [],
       stage_enter: Array.isArray(binding?.trigger_map?.stage_enter) ? [...binding.trigger_map.stage_enter] : [],
-      user_turn: Array.isArray(binding?.trigger_map?.user_turn) ? [...binding.trigger_map.user_turn] : []
+      user_turn: Array.isArray(binding?.trigger_map?.user_turn) ? [...binding.trigger_map.user_turn] : [],
+      stage_exit: Array.isArray(binding?.trigger_map?.stage_exit) ? [...binding.trigger_map.stage_exit] : []
     },
     cache_only: Boolean(binding?.cache_only)
   }

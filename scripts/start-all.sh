@@ -51,7 +51,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "[INFO] Starting backend service (port 8000 via uvicorn)..."
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload &
 BACKEND_PID=$!
 cd ..
 

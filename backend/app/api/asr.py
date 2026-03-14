@@ -33,19 +33,38 @@ async def transcribe_audio(
     source: str = Form(default="manual_voice"),
 ):
     request_started_at = time.time()
+    logger.info(
+        "ASR transcribe request: segment_id=%s source=%s audio=%s filename=%s",
+        segment_id or "-",
+        source,
+        "present" if audio else "missing",
+        audio.filename if audio else "N/A"
+    )
+
     try:
         asr_service = get_asr_service()
         if not asr_service:
+            logger.error("ASR service not initialized")
             return _error("ASR service unavailable", status_code=503)
+
+        logger.info(f"ASR service type: {type(asr_service).__name__}")
+
         if audio is None:
+            logger.error("No audio file in request")
             return _error("Audio file not found", status_code=400)
         if not audio.filename:
+            logger.error("Audio file has no filename")
             return _error("No audio file selected", status_code=400)
 
         audio_data = await audio.read()
-        if len(audio_data) == 0:
+        audio_size = len(audio_data)
+        logger.info("Audio data received: size=%d bytes (%.2f MB)", audio_size, audio_size / (1024 * 1024))
+
+        if audio_size == 0:
+            logger.error("Audio file is empty")
             return _error("Audio file is empty", status_code=400)
-        if len(audio_data) > MAX_AUDIO_SIZE:
+        if audio_size > MAX_AUDIO_SIZE:
+            logger.error("Audio file too large: %d bytes > %d bytes", audio_size, MAX_AUDIO_SIZE)
             return _error(
                 f"Audio file must not exceed {MAX_AUDIO_SIZE // (1024 * 1024)}MB",
                 status_code=400,
@@ -56,9 +75,14 @@ async def transcribe_audio(
         if "." in filename:
             audio_format = filename.rsplit(".", 1)[-1].lower()
 
+        logger.info("Starting ASR transcription: format=%s service=%s", audio_format, type(asr_service).__name__)
+
         text = await run_in_threadpool(asr_service.transcribe, audio_data, audio_format)
         trimmed_text = (text or "").strip()
         text_length = len(trimmed_text)
+
+        logger.info("ASR transcription completed: text_length=%d preview=%s",
+                   text_length, trimmed_text[:50] if trimmed_text else "(empty)")
 
         client_duration_ms = None
         if client_started_at and client_ended_at:
@@ -73,13 +97,15 @@ async def transcribe_audio(
         if trimmed_text in {"啊", "哦", "嗯", "额", "唉", "呃"}:
             should_auto_send = False
 
+        elapsed_ms = int((time.time() - request_started_at) * 1000)
         logger.info(
-            "ASR result: segment_id=%s source=%s text_length=%s duration_ms=%s elapsed_ms=%s",
+            "ASR result: segment_id=%s source=%s text_length=%s duration_ms=%s elapsed_ms=%s should_auto_send=%s",
             segment_id or "-",
             source,
             text_length,
             client_duration_ms,
-            int((time.time() - request_started_at) * 1000),
+            elapsed_ms,
+            should_auto_send
         )
         return {
             "text": trimmed_text,
@@ -91,7 +117,7 @@ async def transcribe_audio(
             "source": source,
         }
     except Exception as exc:
-        logger.error("ASR transcription failed: %s", exc)
+        logger.error("ASR transcription failed: %s", exc, exc_info=True)
         return _error("ASR transcription failed")
 
 
